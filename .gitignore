@@ -1,0 +1,56 @@
+# MailScope – root .gitignore
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+*.whl
+*.venv/
+venv/
+.venv/
+env/
+.env
+*.env.local
+
+# ---- pytest / coverage ----
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ---- Node / npm ----
+node_modules/
+.npm/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Vite build output ----
+frontend/dist/
+frontend/.vite/
+
+# ---- TypeScript ----
+*.tsbuildinfo
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ---- Secrets / env overrides ----
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local

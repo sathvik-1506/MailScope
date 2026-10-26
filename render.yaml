@@ -1,0 +1,36 @@
+services:
+  # ----------------------------------------------------------------------------
+  # Backend API Service (Flask + Gunicorn)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: mailscope-api
+    runtime: python
+    region: oregon
+    plan: standard
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: gunicorn -w 4 -k gthread --threads 8 --bind 0.0.0.0:$PORT "backend.app:create_app()"
+    healthCheckPath: /health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: MAX_BATCH_SIZE
+        value: 100
+      - key: FRONTEND_ORIGIN
+        value: https://mailscope.onrender.com
+
+  # ----------------------------------------------------------------------------
+  # Frontend SPA Service (Static Site)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: mailscope-frontend
+    runtime: static
+    region: oregon
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://mailscope-api.onrender.com
