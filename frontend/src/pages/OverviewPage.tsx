@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import {
   CheckCircle2,
   XCircle,
@@ -8,35 +8,62 @@ import {
   MailCheck,
   BarChart3,
   History,
+  Download,
   ShieldCheck,
   Clock,
   Sparkles,
 } from "lucide-react";
-import { useAnalysis } from "../context/AnalysisContext";
+import { useAnalysis, type AnalysisBatchRecord } from "../context/AnalysisContext";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import { BRAND } from "../constants/brand";
 
 export default function OverviewPage() {
-  const { results, batchHistory } = useAnalysis();
+  const { results, batchHistory, setResults } = useAnalysis();
+  const navigate = useNavigate();
 
-  // Compute aggregate stats across current session
-  const totalInSession = batchHistory.reduce((acc, b) => acc + b.addressesCount, 0);
-  const totalAnalyzed = results.length > 0 ? results.length : totalInSession;
+  // Compute genuine aggregate metrics across all batches or active workspace results
+  const hasHistory = batchHistory.length > 0;
+  const hasActiveResults = results.length > 0;
 
-  const delivered = results.length > 0
+  const totalAnalyzed = hasHistory
+    ? batchHistory.reduce((acc, b) => acc + b.addressesCount, 0)
+    : hasActiveResults
+    ? results.length
+    : 0;
+
+  const delivered = hasHistory
+    ? batchHistory.reduce((acc, b) => acc + b.deliveredCount, 0)
+    : hasActiveResults
     ? results.filter((r) => r.verdict === "likely_delivered").length
-    : batchHistory.reduce((acc, b) => acc + b.deliveredCount, 0);
+    : 0;
 
-  const bounce = results.length > 0
+  const bounce = hasHistory
+    ? batchHistory.reduce((acc, b) => acc + b.bounceCount, 0)
+    : hasActiveResults
     ? results.filter((r) => r.verdict === "likely_bounce").length
-    : batchHistory.reduce((acc, b) => acc + b.bounceCount, 0);
+    : 0;
 
-  const unknown = results.length > 0
+  const unknown = hasHistory
+    ? batchHistory.reduce((acc, b) => acc + b.unknownCount, 0)
+    : hasActiveResults
     ? results.filter((r) => r.verdict === "unknown").length
-    : batchHistory.reduce((acc, b) => acc + b.unknownCount, 0);
+    : 0;
 
-  const deliverabilityRate = totalAnalyzed > 0 ? Math.round((delivered / totalAnalyzed) * 100) : 0;
+  const runsCount = hasHistory ? batchHistory.length : hasActiveResults ? 1 : 0;
+
+  const deliveredPct = totalAnalyzed > 0 ? Math.round((delivered / totalAnalyzed) * 100) : 0;
+  const bouncePct = totalAnalyzed > 0 ? Math.round((bounce / totalAnalyzed) * 100) : 0;
+  const unknownPct = totalAnalyzed > 0 ? Math.max(0, 100 - deliveredPct - bouncePct) : 0;
+
+  const handleInspectBatch = (batch: AnalysisBatchRecord) => {
+    if (batch.hasDetailedResults && batch.results && batch.results.length > 0) {
+      setResults(batch.results);
+      navigate("/app/analyze");
+    } else {
+      navigate("/app/history");
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
@@ -53,11 +80,11 @@ export default function OverviewPage() {
             Deliverability Intelligence Hub
           </h1>
           <p className="mt-1 text-sm text-text-secondary max-w-2xl">
-            {BRAND.positioning} Review aggregate metrics, recent batch results, and quick actions.
+            {BRAND.positioning} Review genuine aggregate metrics, verdict distributions, and previous verification runs.
           </p>
         </div>
 
-        {/* Action Button */}
+        {/* Primary Action Button */}
         <div className="flex items-center gap-3">
           <Button to="/app/analyze" size="md">
             <MailCheck className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -71,7 +98,7 @@ export default function OverviewPage() {
         {/* Total Analyzed */}
         <div className="rounded-xl border border-border-default bg-surface-secondary p-5 shadow-card">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-text-secondary">Total Analyzed</span>
+            <span className="text-xs font-medium text-text-secondary">Total Addresses</span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-text-secondary">
               <Layers className="h-4 w-4" aria-hidden="true" />
             </div>
@@ -80,12 +107,12 @@ export default function OverviewPage() {
             <span className="text-3xl font-bold font-mono tracking-tight text-text-primary">
               {totalAnalyzed}
             </span>
-            <span className="text-xs text-text-muted">
-              {batchHistory.length} {batchHistory.length === 1 ? "run" : "runs"}
+            <span className="text-xs text-text-muted font-mono">
+              {runsCount} {runsCount === 1 ? "run" : "runs"}
             </span>
           </div>
           <p className="mt-2 text-xs text-text-muted">
-            {totalAnalyzed > 0 ? "Processed in active session" : "No addresses evaluated yet"}
+            {totalAnalyzed > 0 ? "Evaluated in retained workspace ledger" : "No addresses evaluated yet"}
           </p>
         </div>
 
@@ -102,12 +129,12 @@ export default function OverviewPage() {
               {delivered}
             </span>
             {totalAnalyzed > 0 && (
-              <span className="text-xs font-mono text-delivered">
-                {deliverabilityRate}%
+              <span className="text-xs font-mono font-semibold text-delivered">
+                {deliveredPct}%
               </span>
             )}
           </div>
-          <p className="mt-2 text-xs text-text-muted">RFC valid, DNS routing & confirmed mailboxes</p>
+          <p className="mt-2 text-xs text-text-muted">RFC valid, active DNS MX & confirmed mailboxes</p>
         </div>
 
         {/* Likely Bounce */}
@@ -123,12 +150,12 @@ export default function OverviewPage() {
               {bounce}
             </span>
             {totalAnalyzed > 0 && (
-              <span className="text-xs font-mono text-bounce">
-                {Math.round((bounce / totalAnalyzed) * 100)}%
+              <span className="text-xs font-mono font-semibold text-bounce">
+                {bouncePct}%
               </span>
             )}
           </div>
-          <p className="mt-2 text-xs text-text-muted">Bad syntax, NXDOMAIN or explicit 5xx rejection</p>
+          <p className="mt-2 text-xs text-text-muted">Bad syntax, NXDOMAIN or 5xx rejection</p>
         </div>
 
         {/* Unknown */}
@@ -144,8 +171,8 @@ export default function OverviewPage() {
               {unknown}
             </span>
             {totalAnalyzed > 0 && (
-              <span className="text-xs font-mono text-unknown">
-                {Math.round((unknown / totalAnalyzed) * 100)}%
+              <span className="text-xs font-mono font-semibold text-unknown">
+                {unknownPct}%
               </span>
             )}
           </div>
@@ -153,85 +180,181 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* 3. Quick Action & Primary Features Grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Fast Action Card */}
-        <div className="rounded-xl border border-brand-500/30 bg-surface-secondary p-6 shadow-card flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-brand-400 text-xs font-semibold uppercase tracking-wider mb-2">
-              <Sparkles className="h-4 w-4" />
-              <span>Quick Action</span>
+      {/* 3. Verdict Distribution Visualizer */}
+      {totalAnalyzed > 0 && (
+        <div className="rounded-xl border border-border-default bg-surface-secondary p-6 shadow-card space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-text-primary">
+                Aggregate Verdict Distribution
+              </h2>
+              <p className="text-xs text-text-muted mt-0.5">
+                Proportional breakdown of verification verdicts across all evaluated addresses.
+              </p>
             </div>
-            <h2 className="text-lg font-bold text-text-primary">
-              Verify an Email Batch
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-              Input up to 100 email addresses for simultaneous RFC syntax testing, live DNS MX lookup, and non-disruptive SMTP handshake probing.
-            </p>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-border-subtle flex flex-col sm:flex-row gap-3">
-            <Button to="/app/analyze" size="sm" className="w-full justify-center">
-              <span>Open Analyzer</span>
-              <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Analytics Card */}
-        <div className="rounded-xl border border-border-default bg-surface-secondary p-6 shadow-card flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-text-muted text-xs font-semibold uppercase tracking-wider mb-2">
-              <BarChart3 className="h-4 w-4 text-brand-400" />
-              <span>Deep Signals</span>
-            </div>
-            <h2 className="text-lg font-bold text-text-primary">
-              Deliverability Analytics
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-              Explore domain distributions, pipeline check latencies, and syntax vs network failure ratios across all analyzed batches.
-            </p>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-border-subtle">
             <Link
               to="/app/analytics"
-              className="inline-flex items-center text-xs font-medium text-brand-400 hover:text-brand-300 transition-colors"
+              className="text-xs font-medium text-brand-400 hover:text-brand-300 inline-flex items-center gap-1 transition-colors"
             >
-              <span>View Analytics & Charts</span>
-              <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              <span>Explore Analytics</span>
+              <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
-        </div>
 
-        {/* History Card */}
-        <div className="rounded-xl border border-border-default bg-surface-secondary p-6 shadow-card flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-text-muted text-xs font-semibold uppercase tracking-wider mb-2">
-              <History className="h-4 w-4 text-brand-400" />
-              <span>Session Log</span>
+          {/* Accessible Stacked Bar */}
+          <div
+            role="img"
+            aria-label={`Verdict breakdown: ${delivered} delivered (${deliveredPct}%), ${bounce} bounce (${bouncePct}%), ${unknown} unknown (${unknownPct}%)`}
+            className="h-4 w-full rounded-full bg-surface-elevated overflow-hidden flex shadow-inner border border-border-subtle"
+          >
+            {deliveredPct > 0 && (
+              <div
+                style={{ width: `${deliveredPct}%` }}
+                className="bg-emerald-500 hover:opacity-90 transition-all duration-300"
+                title={`Likely Delivered: ${delivered} (${deliveredPct}%)`}
+              />
+            )}
+            {bouncePct > 0 && (
+              <div
+                style={{ width: `${bouncePct}%` }}
+                className="bg-rose-500 hover:opacity-90 transition-all duration-300"
+                title={`Likely Bounce: ${bounce} (${bouncePct}%)`}
+              />
+            )}
+            {unknownPct > 0 && (
+              <div
+                style={{ width: `${unknownPct}%` }}
+                className="bg-amber-500 hover:opacity-90 transition-all duration-300"
+                title={`Unknown: ${unknown} (${unknownPct}%)`}
+              />
+            )}
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-6 pt-1 text-xs text-text-secondary">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-emerald-500 shrink-0" />
+              <span>
+                Delivered: <strong className="text-text-primary font-mono">{delivered}</strong> ({deliveredPct}%)
+              </span>
             </div>
-            <h2 className="text-lg font-bold text-text-primary">
-              Batch History
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-              Review prior verification runs from this session, inspect full technical evidence ledgers, and export sanitized CSV reports.
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-rose-500 shrink-0" />
+              <span>
+                Bounce: <strong className="text-text-primary font-mono">{bounce}</strong> ({bouncePct}%)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-amber-500 shrink-0" />
+              <span>
+                Unknown: <strong className="text-text-primary font-mono">{unknown}</strong> ({unknownPct}%)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Quick Links Navigation Grid (4 Key Workspaces) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* 1. Analyze Emails */}
+        <Link
+          to="/app/analyze"
+          className="group rounded-xl border border-border-default bg-surface-secondary p-5 shadow-card hover:border-brand-500/40 hover:bg-surface-elevated/70 transition-all flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                <MailCheck className="h-4 w-4" />
+              </div>
+              <Sparkles className="h-3.5 w-3.5 text-brand-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <h3 className="text-sm font-bold text-text-primary group-hover:text-brand-400 transition-colors">
+              Analyze Emails
+            </h3>
+            <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+              Verify address lists manually or extract candidates from .csv, .txt, .pdf, .docx, and .eml documents.
             </p>
           </div>
-
-          <div className="mt-6 pt-4 border-t border-border-subtle">
-            <Link
-              to="/app/history"
-              className="inline-flex items-center text-xs font-medium text-brand-400 hover:text-brand-300 transition-colors"
-            >
-              <span>Browse History Ledger</span>
-              <ArrowRight className="h-3.5 w-3.5 ml-1" />
-            </Link>
+          <div className="mt-4 pt-3 border-t border-border-subtle flex items-center text-xs font-medium text-brand-400">
+            <span>Open Analyzer</span>
+            <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
           </div>
-        </div>
+        </Link>
+
+        {/* 2. Export Center */}
+        <Link
+          to="/app/exports"
+          className="group rounded-xl border border-border-default bg-surface-secondary p-5 shadow-card hover:border-brand-500/40 hover:bg-surface-elevated/70 transition-all flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-elevated text-text-secondary border border-border-subtle">
+                <Download className="h-4 w-4 text-brand-400" />
+              </div>
+            </div>
+            <h3 className="text-sm font-bold text-text-primary group-hover:text-brand-400 transition-colors">
+              Export Center
+            </h3>
+            <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+              Download sanitized CSV reports protected against formula injection (CWE-1236) with custom column options.
+            </p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-border-subtle flex items-center text-xs font-medium text-brand-400">
+            <span>Export Reports</span>
+            <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* 3. Analytics */}
+        <Link
+          to="/app/analytics"
+          className="group rounded-xl border border-border-default bg-surface-secondary p-5 shadow-card hover:border-brand-500/40 hover:bg-surface-elevated/70 transition-all flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-elevated text-text-secondary border border-border-subtle">
+                <BarChart3 className="h-4 w-4 text-brand-400" />
+              </div>
+            </div>
+            <h3 className="text-sm font-bold text-text-primary group-hover:text-brand-400 transition-colors">
+              Analytics
+            </h3>
+            <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+              Inspect technical dataset composition, domain rankings, mail provider infrastructure, and routing telemetry.
+            </p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-border-subtle flex items-center text-xs font-medium text-brand-400">
+            <span>View Telemetry</span>
+            <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* 4. History */}
+        <Link
+          to="/app/history"
+          className="group rounded-xl border border-border-default bg-surface-secondary p-5 shadow-card hover:border-brand-500/40 hover:bg-surface-elevated/70 transition-all flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-elevated text-text-secondary border border-border-subtle">
+                <History className="h-4 w-4 text-brand-400" />
+              </div>
+            </div>
+            <h3 className="text-sm font-bold text-text-primary group-hover:text-brand-400 transition-colors">
+              Analysis History
+            </h3>
+            <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+              Audit previous verification batches, search by domain metadata, manage retention, or re-inspect evidence.
+            </p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-border-subtle flex items-center text-xs font-medium text-brand-400">
+            <span>Browse History</span>
+            <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
       </div>
 
-      {/* 4. Recent Analysis Activity Section */}
+      {/* 5. Recent Analysis Activity Section */}
       <div className="rounded-xl border border-border-default bg-surface-secondary shadow-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-border-subtle px-6 py-4 bg-surface-elevated/40">
           <div>
@@ -239,32 +362,34 @@ export default function OverviewPage() {
               Recent Analysis Activity
             </h2>
             <p className="text-xs text-text-muted mt-0.5">
-              Chronological log of batch verifications executed during this session.
+              Chronological log of batch verifications executed across your workspace.
             </p>
           </div>
           {batchHistory.length > 0 && (
             <Link
               to="/app/history"
-              className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+              className="text-xs font-medium text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1"
             >
-              View all ({batchHistory.length})
+              <span>View all ({batchHistory.length})</span>
+              <ArrowRight className="h-3 w-3" />
             </Link>
           )}
         </div>
 
         {batchHistory.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated text-text-muted mb-3 border border-border-subtle">
-              <Clock className="h-6 w-6" />
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-elevated text-brand-400 border border-brand-500/20 mb-4 shadow-sm">
+              <Clock className="h-7 w-7" />
             </div>
-            <h3 className="text-sm font-semibold text-text-primary">
-              No verification activity recorded yet
+            <h3 className="text-base font-semibold text-text-primary">
+              No Analysis Activity Yet
             </h3>
-            <p className="mt-1 text-xs text-text-secondary max-w-sm mx-auto">
-              Ready to verify deliverability? Run an email batch to populate real-time activity and aggregate telemetry.
+            <p className="mt-1.5 text-xs text-text-secondary max-w-md mx-auto leading-relaxed">
+              Welcome to Mailora! Every address batch you verify is automatically cataloged with privacy-conscious telemetry. Start with manual input or upload a document to begin.
             </p>
-            <div className="mt-5">
-              <Button to="/app/analyze" size="sm">
+            <div className="mt-6 flex justify-center gap-3">
+              <Button to="/app/analyze" size="md">
+                <MailCheck className="h-4 w-4 mr-2" />
                 <span>Start Your First Analysis</span>
               </Button>
             </div>
@@ -278,32 +403,40 @@ export default function OverviewPage() {
               >
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-mono text-xs font-semibold text-text-primary">
+                    <span className="font-semibold text-xs text-text-primary">
                       {batch.title}
                     </span>
-                    <span className="text-[10px] text-text-muted">
-                      {new Date(batch.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span className="text-[11px] font-mono text-text-muted">
+                      {new Date(batch.timestamp).toLocaleDateString()}{" "}
+                      {new Date(batch.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                     {batch.smtpProbed && (
                       <span className="rounded bg-brand-500/10 px-1.5 py-0.2 text-[10px] font-mono text-brand-400 border border-brand-500/20">
-                        SMTP Probed
+                        SMTP
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-text-secondary">
-                    {batch.addressesCount} {batch.addressesCount === 1 ? "address" : "addresses"} evaluated
-                  </p>
+                  <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    <span className="font-mono text-text-muted">{batch.id}</span>
+                    <span>•</span>
+                    <span>{batch.addressesCount} {batch.addressesCount === 1 ? "address" : "addresses"}</span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Badge color="delivered">{batch.deliveredCount} Delivered</Badge>
-                    <Badge color="bounce">{batch.bounceCount} Bounce</Badge>
-                    <Badge color="unknown">{batch.unknownCount} Unknown</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge color="delivered">{batch.deliveredCount}</Badge>
+                    <Badge color="bounce">{batch.bounceCount}</Badge>
+                    <Badge color="unknown">{batch.unknownCount}</Badge>
                   </div>
-                  <Button to="/app/analyze" variant="ghost" size="sm">
+                  <button
+                    type="button"
+                    onClick={() => handleInspectBatch(batch)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-border-subtle bg-surface-primary text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors cursor-pointer"
+                  >
                     <span>Inspect</span>
-                  </Button>
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -311,11 +444,11 @@ export default function OverviewPage() {
         )}
       </div>
 
-      {/* 5. Trust & Methodology Footer Note */}
+      {/* 6. Trust & Methodology Footer Note */}
       <div className="flex items-start gap-3 rounded-xl border border-border-subtle bg-surface-secondary/60 p-4 text-xs text-text-muted">
         <ShieldCheck className="h-4 w-4 text-brand-400 shrink-0 mt-0.5" />
         <p className="leading-relaxed">
-          {BRAND.name} operates statelessly without permanent address storage. All evaluations test RFC conformance and authoritative DNS nameservers without sending message bodies.
+          {BRAND.name} operates statelessly without permanent server-side address storage. All evaluations test RFC conformance and authoritative DNS nameservers without sending message bodies.
         </p>
       </div>
     </div>

@@ -20,161 +20,152 @@ Traditional email validation tools operate as black boxes, often returning binar
 
 ---
 
-## 2. Core Features
+## 2. Core Features & Application Workspaces
 
-* **Multi-Layer Technical Analysis Pipeline**:
-  1. **RFC 5321/5322 Syntax Checking**: Normalization, internationalized domain decoding, length bounds (local-part <= 64, total <= 320), and strict grammar checks.
-  2. **DNS & Mail Routing Inspection**: Authoritative DNS resolution for MX records, explicit null MX (RFC 7505) bounce detection, implicit MX fallback (RFC 5321 §5.1), and authoritative NXDOMAIN detection.
-  3. **Non-Intrusive SMTP Probing (Opt-In)**: Issues `EHLO`, `MAIL FROM`, and `RCPT TO` commands to verify recipient acknowledgment, then issues `QUIT`. **Strictly never executes the `DATA` command or transmits message content.**
-* **Explainable Classification Engine**:
-  * **Likely Delivered**: Active mail server explicitly acknowledged the recipient envelope probe.
-  * **Likely Bounce**: Definitively invalid syntax, non-existent domain (`NXDOMAIN`), explicit null MX, or 5xx rejection code.
-  * **Unknown**: Mailbox existence cannot be verified conclusively (e.g. SMTP disabled, blocked port 25, timeouts, or greylisting).
-* **Evidence Ledger & Audit Trail**: Every analyzed address includes an expandable drawer breaking down each pipeline check, observed latency, technical evidence items, and known operational caveats.
-* **Secure Document Email Extraction Workflow**:
-  * **Supported Formats**: `.txt` (plain text), `.csv` (spreadsheets), `.pdf` (extractable text via `pypdf`), `.docx` (Word documents via `python-docx`), and `.eml` (standard RFC 822 messages).
-  * **Explicit Format Protections**: Disallows legacy binary Word files (`.doc`) with guidance to convert to `.docx` or `.txt`; outright rejects executable binaries (`.exe`, `.dll`, `.bat`), scripts, and general archives (`.zip`).
-  * **Scanned PDF Guidance**: Clearly clarifies that non-searchable, scanned-image PDFs require conversion to searchable text first (OCR is intentionally not supported to avoid introducing uncalibrated external dependencies).
-  * **Security & Defense-in-Depth**: Strict 5 MB per file and 5 files per upload limits; streaming in-memory parsing with zero disk persistence; path traversal sanitization; zip bomb and decompression protection; privacy-safe logging that avoids recording raw email addresses.
-  * **Candidate Review & Batch Fusion**: Reviewable candidate list with source references (file + row/col/page), duplicate removal counters, warning alerts, quick manual address addition, and direct dispatch to the deliverability verification engine.
-* **Modern SaaS Web Workspace**:
-  * Professional responsive interface with Light, Dark, and System appearance modes.
-  * Fast bulk address textarea with line/comma/semicolon normalization and counter.
-  * Drag-and-drop document upload with real-time format and size validation.
-  * Live RFC 2606 test fixtures (`@example.com`, `@example.org`) for zero-risk demonstration.
-  * Instant filter tabs, text search, and sorting.
-  * RFC 4180 compliant CSV export hardened against Spreadsheet Formula Injection (CWE-1236).
+### Application Routes & Workspaces
+
+Mailora is structured as a multi-page single-page application (SPA) with dedicated workspaces accessible via the persistent workspace shell:
+
+| Route | Workspace | Purpose |
+| :--- | :--- | :--- |
+| `/` | **Landing Page** | Public SaaS homepage detailing methodology, zero-persistence privacy guarantees, and interactive demo fixtures. |
+| `/app` | **Overview Dashboard** | Real-time deliverability intelligence hub displaying genuine aggregate metrics, verdict distribution visualizer, recent activity ledger, and quick links. |
+| `/app/analyze` | **Analyze Emails** | Dedicated verification engine supporting manual address entry, sample test fixtures, and secure document file upload with candidate extraction. |
+| `/app/exports` | **Export Center** | Dedicated CSV report generator featuring report preview, custom column selection, download history, and formula injection mitigation (CWE-1236). |
+| `/app/analytics` | **Analytics** | Technical dataset composition telemetry: domain rankings, email provider infrastructure breakdown, DNS routing outcomes, SMTP check coverage, and genuine activity timeline. |
+| `/app/history` | **Analysis History** | Comprehensive execution ledger featuring run search, date-range filtering, pagination, run inspection, CSV downloads, and deletion confirmation dialogs. |
+| `/app/settings` | **Settings** | User-configurable appearance modes (Light/Dark/System), SMTP default configuration explanation, multi-tier storage explanation, and data deletion controls. |
 
 ---
 
-## 3. Technology Stack
+## 3. Demographics Policy & Technical Dataset Composition
+
+> [!NOTE]
+> **Product Definition of "Demographics"**: In Mailora, "demographics" strictly refers to the **technical characteristics and composition of the email dataset** (e.g. domain distribution, mail provider infrastructure, routing protocols, and syntax hygiene).
+
+Mailora **never infers or estimates personal demographics** (such as age, gender, ethnicity, income, exact location, or personal identity) from email addresses.
+
+Key data integrity and privacy principles:
+* **Custom Domain Privacy**: Custom domains are classified as `"Custom / Unknown Provider"` unless authoritative MX evidence supports a specific provider (e.g. Google Workspace, Microsoft 365, Proofpoint).
+* **Decoupled Classification**: Provider and domain classifications are strictly distinguished from actual mailbox deliverability.
+* **Privacy-Safe Aggregation**: Email local-parts are never exposed or rendered in charts, summaries, or history lists.
+* **No Fabricated Data**: Time-series analytics and history entries derive strictly from genuine timestamps and completed verification runs.
+
+---
+
+## 4. Multi-Tier Storage Architecture & Privacy Lifecycle
+
+Mailora employs a privacy-preserving storage model designed for unauthenticated environments:
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                             MAILORA STORAGE                              │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  1. Server Memory (Ephemeral)                                            │
+│     • Zero disk persistence for raw email addresses or uploaded docs.    │
+│     • Memory is deallocated immediately upon request completion.         │
+│                                                                          │
+│  2. Server History Ledger (Aggregate Metadata Only)                      │
+│     • Minimal SQLite / PostgreSQL database.                              │
+│     • Stores only: Batch ID, timestamp, counts, top domain frequencies.  │
+│     • Automatically purged after 30 days (HISTORY_RETENTION_DAYS).       │
+│                                                                          │
+│  3. Local Browser Storage (Device-Isolated)                              │
+│     • Detailed per-address verification records and check evidence.       │
+│     • Isolated to user's device in localStorage (up to 40 runs).         │
+│     • When cleared, historical runs show "Metadata Only" with summary.   │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+* **Zero Server Address Storage**: Raw email addresses and uploaded documents are never stored in the server database or written to disk.
+* **30-Day Metadata Retention**: Server-side history stores non-sensitive aggregate run statistics with an automatic 30-day pruning TTL (`purge_expired_runs`).
+* **Client-Side Isolation**: Detailed per-recipient check evidence is stored in browser `localStorage`. When detailed results expire or are viewed on a new device, Mailora clearly distinguishes summary metadata from full records.
+* **User-Driven Deletion**: Users can delete individual runs or clear all history records at any time from both `/app/history` and `/app/settings`.
+
+---
+
+## 5. Document Email Extraction Workflow
+
+The Analyze Emails workspace (`/app/analyze`) includes a streaming extraction workflow to detect candidate addresses from document files:
+
+### Supported File Formats
+
+| Format | Extension | Processing Engine | Notes |
+| :--- | :--- | :--- | :--- |
+| **Plain Text** | `.txt` | UTF-8 Streaming Regex | Line-by-line candidate extraction with row tracking. |
+| **Spreadsheets / CSV** | `.csv` | Python `csv.reader` | Delimiter sniffing (comma, semicolon, tab) with column/row coordinates. |
+| **PDF Documents** | `.pdf` | `pypdf` | Extractable text extraction with page numbers. Non-searchable scanned PDFs require text conversion first. |
+| **Word Documents** | `.docx` | `python-docx` | Paragraph and table cell extraction with paragraph tracking. |
+| **Email Messages** | `.eml` | Python `email` | RFC 822 header extraction (To, From, Cc, Bcc) and plain text / HTML body extraction. |
+
+### Explicit Security & Format Protections
+* **Legacy Word Files (`.doc`)**: Legacy binary Word files are rejected with a clear message directing users to convert the document to `.docx` or `.txt`.
+* **Executables & Archives**: Files with extensions `.exe`, `.dll`, `.bat`, `.sh`, `.zip`, `.tar`, `.gz` are rejected immediately.
+* **Bounds & Protections**: Maximum 5 MB per file, maximum 5 files per batch, maximum 10 MB total content length, path traversal sanitization, and streaming in-memory parsing.
+
+---
+
+## 6. Appearance & Theme System
+
+Mailora features an application-wide appearance system:
+* **Three Selectable Modes**:
+  1. **Light**: Clean, high-contrast daylight theme with subtle borders and shadows.
+  2. **Dark**: Deep slate/zinc theme optimized for low-light environments.
+  3. **System**: Automatically syncs with operating system preference (`prefers-color-scheme`).
+* **Default Preference**: Light mode for first-time visitors.
+* **Persistence & FOUC Prevention**: Preference persisted in `localStorage`. Root theme class (`dark`) applied before paint to eliminate Flash of Unstyled Content (FOUC).
+* **Controls**: Accessible theme switchers in the workspace header, sidebar, and Settings workspace (`/app/settings`).
+
+---
+
+## 7. Technology Stack
 
 ### Frontend
 * **Core**: React 19, TypeScript 5.8+, Vite 8
 * **Styling**: Tailwind CSS v4, Lucide React icons
 * **Routing**: React Router v7 (with SPA wildcard fallback)
-* **Testing & Quality**: Node test runner + `tsx`, `oxlint`
+* **Testing & Quality**: Node.js test runner via `tsx`, `oxlint`
 
 ### Backend
 * **Core**: Python 3.12+ / 3.14+, Flask 3.1
 * **DNS Resolution**: `dnspython` 2.7+ with finite timeouts and thread safety
 * **Syntax Validation**: `email-validator` 2.2+
+* **Document Extraction**: `pypdf` 5.0+, `python-docx` 1.1+
+* **Persistence**: SQLite (standard library) with WAL mode, parameterized queries, and PostgreSQL support via `DATABASE_URL`
 * **Concurrency**: `concurrent.futures.ThreadPoolExecutor` (bounded to 10 workers)
 * **Production Server**: Gunicorn 23+ (WSGI with gthread worker model)
 * **Testing & Quality**: `pytest` 8.4+, `pytest-cov`
 
 ---
 
-## 4. Architecture & System Flow
-
-```
-[ User Browser / Client ]
-            │
-            ▼
-    [ Vite React SPA ]  (Port 5173 / Production CDN)
-            │
-      HTTP POST /api/analyze  (JSON batch payload, max 100 addresses)
-            │
-            ▼
- [ Flask + Gunicorn WSGI ]  (Port 5000)
-    │
-    ├─ 1. Request Validator (Payload bounds <= 1MB, schema validation, batch limit)
-    ├─ 2. Concurrency Pool (ThreadPoolExecutor max_workers=10, input order preserved)
-    │     │
-    │     ├─ Layer 1: Syntax Checker (RFC 5321/5322 grammar, length limits)
-    │     │
-    │     ├─ Layer 2: DNS Analyzer (MX / Implicit MX / Null MX via dnspython)
-    │     │           [Thread-safe DNS domain cache to eliminate duplicate lookups]
-    │     │
-    │     └─ Layer 3: SMTP Probe (Opt-In only, RCPT TO probe, SSRF IP filtering)
-    │                 [Blocked connections/timeouts safely classified as INCONCLUSIVE]
-    │
-    └─ 3. Evidence Classifier (Synthesizes checks into verdict + evidence ledger)
-            │
-            ▼
-    Structured JSON Response (verdict, reason_code, evidence, limitations)
-```
-
----
-
-## 5. Directory Structure
-
-```
-mailora/
-├── .env.example              # Development environment variable reference
-├── .env.production.example   # Production deployment environment variable reference
-├── .gitignore                # Comprehensive Git exclusion rules
-├── Dockerfile                # Production multi-stage Docker container specification
-├── docker-compose.yml        # Container orchestration for local / VPS deployment
-├── Procfile                  # WSGI command for Heroku / Render / Railway
-├── pyproject.toml            # Root pytest configuration
-├── render.yaml               # Render Blueprint for automated two-tier deployment
-├── backend/
-│   ├── app.py                # Flask application factory, error handlers, and API endpoints
-│   ├── requirements.txt      # Production Python dependencies (includes Gunicorn)
-│   ├── requirements-dev.txt  # Testing dependencies (pytest, pytest-cov)
-│   ├── services/
-│   │   ├── classifier.py     # Deterministic verdict synthesis and explanation rules
-│   │   ├── dns_checker.py    # DNS query execution with finite timeouts and MX fallback
-│   │   ├── schemas.py        # Request schema validation, bounds checking, email masking
-│   │   ├── smtp_checker.py   # RCPT TO probe with SSRF protection (never calls DATA)
-│   │   └── syntax_checker.py # RFC syntax parsing and normalization
-│   └── tests/
-│       ├── test_api.py       # API integration tests, CORS, duplicate caching, limits
-│       ├── test_classifier.py# Verdict decision matrix tests
-│       ├── test_dns_checker.py # Mocked DNS record scenarios
-│       ├── test_smtp_checker.py# Mocked SMTP responses and SSRF protection tests
-│       └── test_syntax_checker.py# RFC email syntax test vectors
-├── docs/
-│   └── architecture.md       # Detailed technical design specifications
-└── frontend/
-    ├── package.json          # Frontend scripts and dependencies
-    ├── vercel.json           # Vercel SPA rewrite and security headers configuration
-    ├── public/
-    │   ├── _redirects        # SPA route fallback for Netlify / Cloudflare Pages / Render
-    │   ├── favicon.svg       # Brand favicon
-    │   └── icons.svg         # SVG sprite assets
-    └── src/
-        ├── App.tsx           # Route definitions (/ and /app with wildcard redirect)
-        ├── components/       # UI components (Header, Footer, EvidenceDrawer, etc.)
-        ├── pages/
-        │   ├── LandingPage.tsx   # SaaS homepage with interactive demo and methodology
-        │   └── AnalyzerPage.tsx  # Workspace with textarea, table, and evidence ledger
-        ├── services/
-        │   ├── api.ts            # Centralized typed HTTP client with error mapping
-        │   └── analyzerAdapter.ts# Input parsing and RFC 2606 sample fixtures
-        ├── utils/
-        │   └── csvExport.ts      # RFC 4180 CSV export with formula injection mitigation
-        └── __tests__/
-            ├── analyzer.test.ts  # Input parsing and CSV formula injection tests
-            └── api.test.ts       # API response mapping and network error handling tests
-```
-
----
-
-## 6. Environment Variables
+## 8. Environment Variables
 
 ### Backend Configuration
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
 | `PORT` | `5000` | Port for Flask / Gunicorn server. |
-| `FLASK_ENV` | `development` | Set to `production` in live environments to disable debug endpoints. |
-| `FRONTEND_ORIGIN` | `http://localhost:5173` | Allowed CORS origin(s). Separate multiple origins with commas. |
+| `FLASK_ENV` | `development` | Set to `production` in live environments. |
+| `FRONTEND_ORIGIN` | `http://localhost:5173` | Allowed CORS origin(s). Comma-separated for multiple origins. |
 | `MAX_BATCH_SIZE` | `100` | Maximum email addresses permitted per API batch request. |
+| `SQLITE_PATH` | `data/mailora_history.db` | Filepath for SQLite history database (or `:memory:`). |
+| `HISTORY_RETENTION_DAYS` | `30` | Number of days to retain server-side run metadata before auto-purging. |
+| `MAX_CONTENT_LENGTH` | `10485760` (10 MB) | Maximum permitted request body size in bytes. |
 
 ### Frontend Configuration
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
-| `VITE_API_BASE_URL` | `http://localhost:5000` | Base URL pointing to the deployed backend service (no trailing slash). |
+| `VITE_API_BASE_URL` | `http://localhost:5000` | Base URL pointing to deployed backend service (no trailing slash). |
 
 ---
 
-## 7. Local Development Setup
+## 9. Local Development Setup
 
 ### Prerequisites
-* Python 3.12+ (or 3.14+)
+* Python 3.12+ or 3.14+
 * Node.js 20+ and npm
 
 ### 1. Backend Setup
@@ -202,220 +193,88 @@ npm run dev
 
 ---
 
-## 8. API Documentation
+## 10. API Documentation
 
 ### `GET /health`
 Returns service status and operational metadata.
 
-**Response `200 OK`**:
-```json
-{
-  "status": "ok",
-  "service": "mailora-backend",
-  "version": "1.0.0"
-}
-```
-
----
-
 ### `POST /api/analyze` (or `POST /api/v1/analyze`)
 Analyzes a batch of email addresses across the verification pipeline.
+* **Payload**: `{"addresses": ["user@example.com"], "smtp_enabled": false}`
+* **Response**: Includes `batch_id`, `count`, `analysed_at`, and `results` array with checks and evidence.
 
-**Request Body**:
-```json
-{
-  "addresses": [
-    "user@example.com",
-    "invalid..syntax@@example.org"
-  ],
-  "smtp_enabled": false
-}
-```
+### `POST /api/extract` (or `POST /api/v1/extract`)
+Parses uploaded documents (`.txt`, `.csv`, `.pdf`, `.docx`, `.eml`) and returns candidate email addresses with source references.
 
-**Request Constraints**:
-* `Content-Type`: Must be `application/json`.
-* Maximum payload size: `1 MB` (enforced via HTTP 413).
-* Maximum addresses per batch: `100` (configurable via `MAX_BATCH_SIZE`).
-* Maximum length per address: `320` characters.
+### `GET /api/history` (or `GET /api/v1/history`)
+Lists historical analysis runs with pagination, search query (`q`), and date range filters (`start_date`, `end_date`).
 
-**Response `200 OK`**:
-```json
-{
-  "count": 2,
-  "analysed_at": "2026-10-26T22:30:00.000000+00:00",
-  "results": [
-    {
-      "address": "user@example.com",
-      "original_input": "user@example.com",
-      "normalized_address": "user@example.com",
-      "verdict": "unknown",
-      "reason_code": "MAILBOX_UNCONFIRMED",
-      "explanation": "Domain has valid mail routing, but mailbox existence cannot be confirmed without SMTP probing.",
-      "checks_run": ["syntax", "dns"],
-      "checks_skipped": ["smtp"],
-      "evidence": [
-        "Address passes RFC 5321/5322 syntax validation.",
-        "DNS: Found 1 MX record(s): mail.example.com"
-      ],
-      "limitations": [
-        "Mailbox existence unconfirmed without active SMTP probing.",
-        "Server may accept all recipients (catch-all) or greylist probes."
-      ]
-    },
-    {
-      "address": "invalid..syntax@@example.org",
-      "original_input": "invalid..syntax@@example.org",
-      "verdict": "likely_bounce",
-      "reason_code": "INVALID_SYNTAX",
-      "explanation": "The email address fails standard RFC 5321/5322 grammar and cannot receive mail.",
-      "checks_run": ["syntax"],
-      "checks_skipped": ["dns", "smtp"],
-      "evidence": [
-        "Address failed RFC syntax check."
-      ],
-      "limitations": []
-    }
-  ]
-}
-```
+### `DELETE /api/history/<run_id>`
+Permanently deletes a single analysis run from the history database.
+
+### `DELETE /api/history`
+Permanently clears all analysis run records from the history database.
 
 ---
 
-## 9. Automated Testing & Validation
+## 11. Automated Testing & Quality Validation
 
 ### Backend Pytest Suite
-Runs 135 unit and integration tests covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, duplicate caching, concurrency order preservation, rate limiting, and HTTP error status codes:
+Runs **164 unit and integration tests** covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, document extraction, history persistence, pagination, retention purging, and HTTP error status codes:
 ```bash
-# From repository root
-pytest --cov=backend.services --cov=backend.app
-
-# Or from backend directory
-cd backend
-python -m pytest --cov=backend.services --cov=backend.app
+pytest backend/tests
 ```
-**Outcome**: 135 passed, 0 skipped, 0 failures, 86% coverage across core services.
+**Outcome**: 164 passed, 0 failures.
 
 ### Frontend Test Suite
-Runs 29 unit tests across 5 suites verifying address parsing, RFC 4180 / CWE-1236 CSV formula injection defense, filter/search consistency, and typed API response mapping:
+Runs **77 unit tests across 17 test suites** verifying address parsing, CWE-1236 CSV formula injection defense, filter/search consistency, API client mapping, document extraction, theme persistence, and history ledger management:
 ```bash
 cd frontend
 npm test
 ```
-**Outcome**: 29 passed, 0 skipped, 0 failures.
+**Outcome**: 77 passed, 0 failures.
 
-### Frontend Linter & Build Verification
+### Frontend Linter & Production Build
 ```bash
 cd frontend
-npm run lint    # oxlint runs on 33 files (0 errors, 0 warnings)
+npm run lint    # oxlint runs on 54 files (0 errors)
 npm run build   # tsc -b && vite build (generates production bundle in dist/)
 ```
 
-### Continuous Integration (GitHub Actions)
-Automated CI is configured via `.github/workflows/ci.yml` running on pushes and pull requests to `main`:
-* **Backend Job**: Checks Python compilation (`compileall`), installs dependencies, and executes the full Pytest test suite with code coverage.
-* **Frontend Job**: Runs `oxlint`, executes the Node.js test suite via `tsx`, and builds the production bundle with `tsc` and `vite`.
-
 ---
 
-## 10. Security & Privacy Controls
-
-### Privacy & Data Retention Guarantees
-* **Zero Address Persistence**: Mailora never persists submitted email addresses or verification results to a database, key-value store, or disk files. Address batches exist purely in ephemeral process memory during request execution and are deallocated immediately upon response transmission (0-second data retention).
-* **Privacy-Safe Application Logging**: Mailora application logs never record full email addresses. Only batch counts and a privacy-masked representation of the first address (e.g. `a***@example.com`) are logged for diagnostic observability.
-* **Hosting-Provider & Proxy Access Log Implications**:
-  * Mailora's application code does not log submitted email addresses.
-  * However, external infrastructure components—such as cloud hosting access logs (Render, AWS, DigitalOcean, Heroku), reverse proxies (Nginx, Traefik), and CDNs (Cloudflare)—customarily log client IP addresses, request timestamps, User-Agent headers, and request URLs (`/api/analyze`).
-  * Mailora deliberately accepts email addresses via the HTTP request body (`POST /api/analyze`) rather than URL query parameters to ensure email addresses are not captured in standard URL access logs.
-  * Operators deploying Mailora in production should configure their edge reverse proxies and WAFs to disable body logging and set appropriate log retention windows for IP address records.
-
-### Public API Abuse Controls & Rate Limiting Architecture
-* **Process-Local Sliding Window Rate Limiting**:
-  * Unauthenticated public APIs risk abuse from automated scrapers and denial-of-service attempts.
-  * Mailora includes an in-memory sliding-window client rate limiter (`backend/services/rate_limiter.py`) configured via `RATE_LIMIT_PER_MINUTE` (default: 60 requests/minute).
-  * Client IP addresses are extracted from `X-Forwarded-For` or `X-Real-IP` when behind a reverse proxy, falling back to `request.remote_addr`.
-  * **Multi-Worker Architectural Note**: The rate limiter operates in-memory to preserve Mailora's zero-external-dependency and zero-persistence privacy model. In multi-worker deployments (e.g. Gunicorn with multiple worker processes), each worker enforces limits independently. For example, 4 workers with a 60 req/min limit provide an aggregate ceiling of up to 240 req/min under uniform round-robin distribution. For strict global rate limiting across horizontal clusters, an external distributed Redis token-bucket should be deployed.
-* **Bounded Concurrency & Payload Limits**:
-  * Request payload size is strictly bounded by `MAX_CONTENT_LENGTH` (default: 1 MB, configurable via environment).
-  * Address batch size is capped by `MAX_BATCH_SIZE` (default: 100 addresses).
-  * Concurrency per batch is bounded by `MAX_CONCURRENT_WORKERS` (default: 10 threads, clamped between 1 and 20) to prevent thread exhaustion.
-
-### Network Destination & SSRF Defenses
-* **No Arbitrary User Destinations**: User input cannot be used to target arbitrary hostnames, URLs, or internal networks. All destination targets are discovered strictly from authoritative DNS records (MX, A, AAAA) returned for the validated domain.
-* **Server-Side Request Forgery (SSRF) & Anti-TOCTOU Protection**:
-  * Destination IP addresses are checked against prohibited subnets (`is_prohibited_ip`): loopback (`127.0.0.0/8`, `::1`), private RFC 1918 networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), link-local/cloud metadata (`169.254.169.254`), multicast, and reserved addresses.
-  * Direct IP socket connections eliminate Time-Of-Check to Time-Of-Use (TOCTOU) DNS rebinding attacks.
-  * Socket peer addresses are validated post-connect before any SMTP traffic is initiated.
-* **Safe SMTP Probing**: Probes issue `EHLO`, `MAIL FROM`, and `RCPT TO` only. The `DATA` command is never executed, and no email messages are ever transmitted. When SMTP probing is disabled (default), port 25 is never contacted.
-
-### Client-Side Security & Error Redaction
-* **Sanitized Error Responses**: API error responses never expose Python stack traces, exception classes, environment variables, or server file paths to clients.
-* **CORS Restrictions**: Cross-Origin Resource Sharing permits only configured frontend origins (`FRONTEND_ORIGIN`). In production, if `FRONTEND_ORIGIN` is unset, cross-origin browser requests fail closed.
-* **Strict Security Headers**: Every HTTP response enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Cache-Control: no-store, max-age=0`.
-* **Spreadsheet Formula Injection Defense (CWE-1236)**: Exported CSV cells matching `=+\-@|%` or preceded by leading whitespace or control characters are automatically prepended with a single quote (`'`) to neutralize formula execution in Excel and Google Sheets.
-
-### Remaining Risks
-* While Mailora implements defense-in-depth protections, deploying any unauthenticated public API carries residual operational risks:
-  1. Distributed botnets utilizing rotating residential proxies can distribute requests across many IP addresses to bypass IP-based rate limiting.
-  2. Public SMTP probing from cloud provider IP ranges may lead to recipient mail servers temporarily greylisting or rate-limiting the Mailora host IP.
-  3. Reverse proxies that log full HTTP request bodies would inadvertently store email addresses in proxy access logs unless specifically configured to omit request bodies.
-
----
-
-## 11. Public Deployment Guide
+## 12. Public Deployment Guide
 
 Mailora is designed for production deployment as two independent services: a static Single-Page Application (Frontend) and a Python WSGI service (Backend).
 
 ### Option A: Render (Automated Two-Tier via `render.yaml`)
-Render supports both Python Web Services and Static Sites with automated route rewrites using the committed `render.yaml` blueprint:
-1. Push this repository to GitHub or GitLab.
-2. Log into [Render Dashboard](https://dashboard.render.com/) and click **New + > Blueprint**.
-3. Select the repository. Render will automatically detect `render.yaml` and provision:
-   * **`mailora-api`**: Python Web Service running Gunicorn on the `starter` tier ($7/mo, or `free` if available on your account).
+1. Log into [Render Dashboard](https://dashboard.render.com/) and click **New + > Blueprint**.
+2. Connect this repository. Render automatically reads `render.yaml` and provisions:
+   * **`mailora-api`**: Python Web Service running Gunicorn.
    * **`mailora-frontend`**: Static Site with SPA wildcard rewrite `/* -> /index.html`.
-4. During blueprint creation (or in the service dashboard), Render will prompt for the environment variables marked `sync: false`:
-   * Set `FRONTEND_ORIGIN` on `mailora-api` to your frontend's assigned URL (e.g. `https://<frontend-subdomain>.onrender.com`).
-   * Set `VITE_API_BASE_URL` on `mailora-frontend` to your backend's assigned URL (e.g. `https://<api-subdomain>.onrender.com`).
-5. Trigger a deploy on both services.
+3. Set the environment variables:
+   * Set `FRONTEND_ORIGIN` on `mailora-api` to your frontend's assigned URL.
+   * Set `VITE_API_BASE_URL` on `mailora-frontend` to your backend's assigned URL.
+4. Deploy both services.
 
-### Option B: Frontend on Vercel / Netlify + Backend on Railway / Fly.io
-
-#### 1. Backend (Railway or Fly.io)
-* **Start Command**: `gunicorn -w 4 -k gthread --threads 8 --bind 0.0.0.0:$PORT "backend.app:create_app()"`
-* **Environment Variables**:
-  * `PORT=5000`
-  * `FLASK_ENV=production`
-  * `FRONTEND_ORIGIN=https://<your-frontend-app>.vercel.app`
-* Verify health endpoint: `curl https://<your-backend-url>/health`
-
-#### 2. Frontend (Vercel or Netlify)
-* **Root Directory**: `frontend`
-* **Build Command**: `npm run build`
-* **Output Directory**: `dist`
-* **Environment Variable**: `VITE_API_BASE_URL=https://<your-backend-url>`
-* The repository includes `frontend/vercel.json` and `frontend/public/_redirects` which automatically ensure direct visits to `/app` load correctly.
-
-### Option C: Docker / Docker Compose
+### Option B: Docker / Docker Compose
 Deploy to any Linux VPS, AWS EC2, or DigitalOcean Droplet:
 ```bash
-# Build and launch backend container
 docker compose up -d
-
-# Verify container health
 curl -f http://localhost:5000/health
 ```
 
 ---
 
-## 12. Operational Limitations & SMTP Realities
+## 13. Operational Limitations & SMTP Realities
 
-* **Port 25 Egress Blocking**: Outbound TCP port 25 is blocked by default across major cloud platforms (AWS, Google Cloud Run, Render, Vercel Serverless, DigitalOcean). When deploying to environments with port 25 restrictions:
-  * Keep SMTP verification disabled (the default setting).
-  * If SMTP is enabled, Mailora gracefully handles connection blocks and classifies the result as `unknown` with check status `unavailable`, never falsifying a bounce.
-* **Greylisting**: Some mail servers temporarily reject initial connection attempts from unrecognized IPs with SMTP code `451` or `421`. Mailora treats temporary codes as `inconclusive`.
-* **Catch-All Mailboxes**: Domains configured with catch-all routing will respond `250 OK` to any probed address. Mailora highlights this limitation in the Evidence Ledger.
+* **Port 25 Egress Blocking**: Outbound TCP port 25 is blocked by default across major cloud hosting providers. SMTP verification is disabled by default to maintain fast and reliable operation. When enabled, connection blocks are classified as `unknown` with check status `unavailable`, never falsifying a bounce.
+* **Greylisting**: Some mail servers temporarily reject initial connection attempts from unrecognized IPs with code `451` or `421`. Mailora treats temporary codes as `inconclusive`.
+* **Catch-All Mailboxes**: Domains configured with catch-all routing will respond `250 OK` to any probed address. Mailora highlights this caveat in the Evidence Ledger.
+* **CWE-1236 Sanitization**: All exported CSV files prepend a single quote (`'`) to formula injection triggers (`=`, `+`, `-`, `@`, tab, pipe) to neutralize formula execution in Microsoft Excel and Google Sheets.
 
 ---
 
-## 13. License
+## 14. License
 
 Distributed under the MIT License. See `LICENSE` for details.
