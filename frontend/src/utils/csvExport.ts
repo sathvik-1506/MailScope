@@ -94,7 +94,7 @@ export function generateResultsCsv(results: DetailedAddressResult[]): string {
 export function downloadResultsCsv(
   results: DetailedAddressResult[],
   filenamePrefix = BRAND.csvPrefix
-): void {
+): string {
   const csvContent = generateResultsCsv(results);
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -109,4 +109,5 @@ export function downloadResultsCsv(
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+  return filename;
 }

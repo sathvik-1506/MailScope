@@ -51,7 +51,7 @@ export default function Navbar() {
               <Settings className="h-4 w-4" aria-hidden="true" />
             </button>
 
-            <Button to="/app" size="sm">Start Analyzing</Button>
+            <Button to="/app/analyze" size="sm">Start Analyzing</Button>
           </div>
 
           {/* Mobile toggle */}
@@ -109,7 +109,7 @@ export default function Navbar() {
                 </button>
               </div>
 
-              <Button to="/app" size="sm" className="mt-2 w-full">
+              <Button to="/app/analyze" size="sm" className="mt-2 w-full">
                 Start Analyzing
               </Button>
             </div>

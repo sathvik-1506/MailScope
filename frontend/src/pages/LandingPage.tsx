@@ -70,7 +70,7 @@ function HeroSection() {
         </p>
 
         <div className="mt-8 flex flex-wrap gap-4">
-          <Button to="/app" size="lg">
+          <Button to="/app/analyze" size="lg">
             Start Analyzing <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Button>
           <Button href="#how-it-works" variant="secondary" size="lg">
@@ -409,7 +409,7 @@ function FinalCTASection() {
         <p className="text-text-secondary mb-8">
           Paste your first batch and get explainable deliverability verdicts in seconds.
         </p>
-        <Button to="/app" size="lg">
+        <Button to="/app/analyze" size="lg">
           Start Analyzing <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>

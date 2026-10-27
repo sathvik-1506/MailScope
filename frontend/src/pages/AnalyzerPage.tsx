@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
-import type { DetailedAddressResult, Verdict } from "../types";
+import { HelpCircle, RotateCcw } from "lucide-react";
 import {
-  AnalyzerHeader,
   AddressInputSection,
   SummaryCards,
   ResultsFilterBar,
@@ -9,8 +8,7 @@ import {
   EvidenceDrawer,
   MethodologyModal,
 } from "../components/analyzer";
-import { Footer } from "../components";
-import SettingsModal from "../components/SettingsModal";
+import { useAnalysis } from "../context/AnalysisContext";
 import { analyzeAddresses, APIClientError } from "../services/api";
 import { SAMPLE_INPUT_BATCH, parseInputAddresses } from "../services/analyzerAdapter";
 import { downloadResultsCsv } from "../utils/csvExport";
@@ -18,11 +16,21 @@ import { filterResults } from "../utils/filterResults";
 import { BRAND } from "../constants/brand";
 
 export default function AnalyzerPage() {
+  const {
+    results,
+    setResults,
+    addBatchToHistory,
+    logExport,
+    selectedRecord,
+    setSelectedRecord,
+    selectedVerdict,
+    setSelectedVerdict,
+  } = useAnalysis();
+
   // Input state
   const [input, setInput] = useState<string>("");
 
-  // Analysis results & execution state
-  const [results, setResults] = useState<DetailedAddressResult[]>([]);
+  // Execution state
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [progressStep, setProgressStep] = useState<string>("");
@@ -33,12 +41,7 @@ export default function AnalyzerPage() {
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedVerdict, setSelectedVerdict] = useState<Verdict | "all">("all");
-
-  // Drawer & Modal state
-  const [selectedRecord, setSelectedRecord] = useState<DetailedAddressResult | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Core Real API Submission Handler
   const handleAnalyze = async (addresses: string[], smtpEnabled: boolean) => {
@@ -47,13 +50,11 @@ export default function AnalyzerPage() {
     lastRequestRef.current = { addresses, smtpEnabled };
     setIsLoading(true);
     setErrorMessage(null);
-    // Clear stale results immediately so they are never presented as a new completed analysis
     setResults([]);
     setSelectedRecord(null);
     setProgressPercent(20);
     setProgressStep(`Connecting to ${BRAND.name} engine for ${addresses.length} addresses...`);
 
-    // Dynamic progress feedback
     const progressTimer1 = setTimeout(() => {
       setProgressPercent(50);
       setProgressStep("Executing syntax validation and DNS MX resolution...");
@@ -77,6 +78,17 @@ export default function AnalyzerPage() {
       setProgressPercent(100);
       setProgressStep("Verification complete.");
       setResults(data);
+
+      // Record this run in session history
+      addBatchToHistory({
+        title: `Batch (${data.length} addresses)`,
+        addressesCount: data.length,
+        deliveredCount: data.filter((r) => r.verdict === "likely_delivered").length,
+        bounceCount: data.filter((r) => r.verdict === "likely_bounce").length,
+        unknownCount: data.filter((r) => r.verdict === "unknown").length,
+        smtpProbed: smtpEnabled,
+        results: data,
+      });
     } catch (err: unknown) {
       if (err instanceof APIClientError) {
         setErrorMessage(err.message);
@@ -123,119 +135,118 @@ export default function AnalyzerPage() {
     }
   };
 
-  // Centralized filtered result set shared across table, summary counters, and CSV export
   const filteredResults = filterResults(results, selectedVerdict, searchQuery);
 
   const handleExportCsv = () => {
-    downloadResultsCsv(filteredResults);
+    const filename = downloadResultsCsv(filteredResults);
+    logExport(filename, filteredResults.length, selectedVerdict);
   };
 
   const filteredCount = filteredResults.length;
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface-primary text-text-primary">
-      {/* 1. Header with logo, navigation, and return home */}
-      <AnalyzerHeader
-        onOpenHelp={() => setIsHelpOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+    <div className="space-y-8 animate-in fade-in duration-200">
+      {/* 1. Page Header with Title and Methodology Action */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-border-subtle pb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-brand-400" aria-hidden="true" />
+            <span className="text-xs font-mono uppercase tracking-wider text-text-muted">
+              Verification Engine
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-text-primary">
+            Analyze Email Addresses
+          </h1>
+          <p className="mt-2 text-sm text-text-secondary max-w-2xl leading-relaxed">
+            Evaluate address batches against RFC syntax rules, live DNS/MX records, and non-disruptive SMTP signals. Every result explains its evidence and limitations.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsHelpOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-surface-elevated rounded-lg border border-border-subtle transition-colors cursor-pointer"
+            title="Verification methodology & RFC limitations"
+          >
+            <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Methodology</span>
+          </button>
+
+          {results.length > 0 && (
+            <button
+              type="button"
+              onClick={handleResetWorkspace}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-muted hover:text-text-primary hover:bg-surface-elevated rounded-lg border border-border-subtle transition-colors cursor-pointer"
+              title="Reset current batch"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Address Batch Input Section */}
+      <AddressInputSection
+        input={input}
+        onChangeInput={setInput}
+        onAnalyze={handleAnalyze}
+        isLoading={isLoading}
+        progressPercent={progressPercent}
+        progressStep={progressStep}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl space-y-8">
-          {/* 2. Page Title & Explanatory Text */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-border-subtle pb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="inline-flex h-2 w-2 rounded-full bg-brand-400" aria-hidden="true" />
-                <span className="text-xs font-mono uppercase tracking-wider text-text-muted">
-                  Deliverability Workspace
-                </span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-text-primary">
-                Email Deliverability Analyzer
-              </h1>
-              <p className="mt-2 text-sm text-text-secondary max-w-2xl leading-relaxed">
-                Evaluate batches of email addresses against RFC syntax rules, live DNS/MX records, and non-disruptive SMTP signals. Every result explains its evidence and limitations.
-              </p>
-            </div>
+      {/* 3. Summary Cards for the three verdicts */}
+      {results.length > 0 && (
+        <SummaryCards
+          results={results}
+          activeFilter={selectedVerdict}
+          onSelectFilter={setSelectedVerdict}
+        />
+      )}
 
-            <div className="text-xs text-text-muted sm:text-right">
-              <div>RFC 5321 &bull; RFC 5322 &bull; DNS MX</div>
-              <div className="text-brand-400 font-medium mt-0.5">Stateless verification</div>
-            </div>
-          </div>
-
-          {/* 3-8. Input Section */}
-          <AddressInputSection
-            input={input}
-            onChangeInput={setInput}
-            onAnalyze={handleAnalyze}
-            isLoading={isLoading}
-            progressPercent={progressPercent}
-            progressStep={progressStep}
+      {/* 4. Results Table with Search & Filter controls */}
+      <div className="space-y-4">
+        {results.length > 0 && (
+          <ResultsFilterBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedVerdict={selectedVerdict}
+            onVerdictChange={setSelectedVerdict}
+            totalCount={results.length}
+            filteredCount={filteredCount}
+            onExportCsv={handleExportCsv}
+            onResetWorkspace={handleResetWorkspace}
           />
+        )}
 
-          {/* 9. Summary Cards for the three verdicts */}
-          {results.length > 0 && (
-            <SummaryCards
-              results={results}
-              activeFilter={selectedVerdict}
-              onSelectFilter={setSelectedVerdict}
-            />
-          )}
+        <ResultsTable
+          results={results}
+          searchQuery={searchQuery}
+          selectedVerdict={selectedVerdict}
+          onSelectRecord={setSelectedRecord}
+          onLoadSample={handleLoadSample}
+          onClearFilters={handleClearFilters}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+          onRetry={handleRetry}
+          onDismissError={() => setErrorMessage(null)}
+        />
+      </div>
 
-          {/* 10. Results Table with Search & Filter controls */}
-          <div className="space-y-4">
-            {results.length > 0 && (
-              <ResultsFilterBar
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                selectedVerdict={selectedVerdict}
-                onVerdictChange={setSelectedVerdict}
-                totalCount={results.length}
-                filteredCount={filteredCount}
-                onExportCsv={handleExportCsv}
-                onResetWorkspace={handleResetWorkspace}
-              />
-            )}
-
-            <ResultsTable
-              results={results}
-              searchQuery={searchQuery}
-              selectedVerdict={selectedVerdict}
-              onSelectRecord={setSelectedRecord}
-              onLoadSample={handleLoadSample}
-              onClearFilters={handleClearFilters}
-              isLoading={isLoading}
-              errorMessage={errorMessage}
-              onRetry={handleRetry}
-              onDismissError={() => setErrorMessage(null)}
-            />
-          </div>
-        </div>
-      </main>
-
-      {/* 11. Evidence Detail Drawer */}
+      {/* 5. Evidence Detail Drawer */}
       <EvidenceDrawer
         result={selectedRecord}
         onClose={() => setSelectedRecord(null)}
       />
 
-      {/* Methodology & Limitations Modal */}
+      {/* 6. Methodology & Limitations Modal */}
       <MethodologyModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
       />
-
-      {/* Workspace & Appearance Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
-
-      {/* 14. Professional Footer */}
-      <Footer />
     </div>
   );
 }
