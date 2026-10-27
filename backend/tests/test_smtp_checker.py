@@ -276,7 +276,7 @@ def test_connection_cleanup_on_success(mock_create_conn: MagicMock, _mock_addrin
 
     check_smtp("user@example.com", "mx1.example.com", enabled=True)
     # Socket or SMTP session closed
-    assert mock_sock.close.called
+    mock_sock.close.assert_called()
 
 
 @patch("backend.services.smtp_checker.socket.getaddrinfo", return_value=_MOCK_PUBLIC_ADDRINFO)
@@ -288,7 +288,7 @@ def test_connection_cleanup_on_exception(mock_create_conn: MagicMock, _mock_addr
 
     result = check_smtp("user@example.com", "mx1.example.com", enabled=True)
     assert result.status == SMTPStatus.INCONCLUSIVE
-    assert mock_sock.close.called
+    mock_sock.close.assert_called()
 
 
 # ==============================================================================

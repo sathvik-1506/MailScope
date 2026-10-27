@@ -170,13 +170,10 @@ mailScope/
 
 ### 1. Backend Setup
 ```bash
-# Navigate to the backend directory
-cd backend
+# Install runtime and testing dependencies (from repository root)
+pip install -r backend/requirements-dev.txt
 
-# Install runtime and testing dependencies
-pip install -r requirements-dev.txt
-
-# Start backend development server
+# Start backend development server (from repository root)
 python -m backend.app
 # Server runs on http://localhost:5000
 ```
@@ -278,27 +275,36 @@ Analyzes a batch of email addresses across the verification pipeline.
 ## 9. Automated Testing & Validation
 
 ### Backend Pytest Suite
-Runs 65 unit and integration tests covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, duplicate caching, concurrency order preservation, and error status codes:
+Runs 133 unit and integration tests covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, duplicate caching, concurrency order preservation, rate limiting, and HTTP error status codes:
 ```bash
+# From repository root
+pytest --cov=backend.services --cov=backend.app
+
+# Or from backend directory
 cd backend
 python -m pytest --cov=backend.services --cov=backend.app
 ```
-**Outcome**: 65 passed, 87% coverage across core services.
+**Outcome**: 133 passed, 0 skipped, 0 failures, 86% coverage across core services.
 
 ### Frontend Test Suite
-Runs 17 unit tests verifying address parsing, CSV formula injection defense, and API response mapping:
+Runs 29 unit tests across 5 suites verifying address parsing, RFC 4180 / CWE-1236 CSV formula injection defense, filter/search consistency, and typed API response mapping:
 ```bash
 cd frontend
 npm test
 ```
-**Outcome**: 17 passed, 0 failures.
+**Outcome**: 29 passed, 0 skipped, 0 failures.
 
 ### Frontend Linter & Build Verification
 ```bash
 cd frontend
-npm run lint    # oxlint runs on 32 files (0 errors, 0 warnings)
+npm run lint    # oxlint runs on 33 files (0 errors, 0 warnings)
 npm run build   # tsc -b && vite build (generates production bundle in dist/)
 ```
+
+### Continuous Integration (GitHub Actions)
+Automated CI is configured via `.github/workflows/ci.yml` running on pushes and pull requests to `main`:
+* **Backend Job**: Checks Python compilation (`compileall`), installs dependencies, and executes the full Pytest test suite with code coverage.
+* **Frontend Job**: Runs `oxlint`, executes the Node.js test suite via `tsx`, and builds the production bundle with `tsc` and `vite`.
 
 ---
 
