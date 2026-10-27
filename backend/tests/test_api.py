@@ -376,8 +376,8 @@ def test_smtp_disabled_by_default_mode(mock_check_dns, client):
         reason="Found MX",
     )
 
-    # Calling without specifying smtp_enabled (defaults to False)
-    response = client.post("/api/analyze", json={"addresses": ["alice@example.com"]})
+    # Explicitly disabling SMTP preserves backward compatibility
+    response = client.post("/api/analyze", json={"addresses": ["alice@example.com"], "smtp_enabled": False})
     assert response.status_code == 200
     data = response.get_json()
     item = data["results"][0]

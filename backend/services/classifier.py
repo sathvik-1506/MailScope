@@ -10,10 +10,45 @@ DECISION POLICY SPECIFICATION
 The classification engine supports exactly three primary classifications:
 - LIKELY_DELIVERED ("Likely delivered")
 - LIKELY_BOUNCE    ("Likely bounce")
-- UNKNOWN          ("Unknown")
+- UNKNOWN          ("Unknown / Insufficient evidence")
 
 Heuristic confidence percentages have been audited and completely removed.
 Decisions are deterministic, explainable, and grounded in technical evidence.
+
+CRITERIA FOR LIKELY_DELIVERED:
+------------------------------
+An address is classified as LIKELY_DELIVERED if and only if ALL of the following hold:
+1. Syntax is RFC 5321/5322 compliant (SyntaxValidation.VALID).
+2. Domain resolves in authoritative DNS and publishes usable mail routing (DNSValidation.CONFIGURED).
+3. Active MX target or fallback A/AAAA record is identified.
+4. Target mail server explicitly acknowledges the recipient probe with a 2xx status code
+   during the SMTP RCPT TO handshake (SMTPProbeStatus.SUCCESS, MailboxExistence.CONFIRMED).
+* Caution & Limitations: Envelope acceptance is strong technical evidence of mailbox existence,
+  but catch-all configurations or post-handshake policy discards mean deliverability is high-confidence,
+  not an unconditional guarantee.
+
+CRITERIA FOR LIKELY_BOUNCE:
+---------------------------
+An address is classified as LIKELY_BOUNCE if ANY of the following definitive negative signals occurs:
+1. Syntax Failure: Address violates RFC 5321/5322 syntax specifications (reason: INVALID_SYNTAX).
+2. Non-existent Domain: Domain returns NXDOMAIN from authoritative DNS (reason: DOMAIN_NOT_FOUND).
+3. No Mail Routing: Domain exists but publishes no MX and no fallback A/AAAA records, or publishes
+   an explicit Null MX record (RFC 7505) (reason: NO_MAIL_ROUTING).
+4. Explicit SMTP Rejection: Target mail server explicitly rejects recipient during SMTP handshake
+   with a 5xx permanent failure code (550, 551, 552, 553, 554) (reason: MAILBOX_REJECTED).
+
+CRITERIA FOR UNKNOWN / INSUFFICIENT EVIDENCE:
+---------------------------------------------
+An address is classified as UNKNOWN if the available evidence is inconclusive, incomplete, or restricted:
+1. Valid syntax and configured MX records, but SMTP connection cannot connect due to hosting
+   environment port 25 restrictions or network unreachability (reason: SMTP_UNAVAILABLE).
+   * RULE: A network error or port 25 block must NEVER produce an invalid-email or bounce verdict.
+2. Valid syntax and configured MX records, but SMTP probe timed out (reason: SMTP_TIMEOUT).
+   * RULE: A timeout must NEVER produce an invalid-email or bounce verdict.
+3. Temporary DNS failures (DNS_TIMEOUT, DNS_TEMPORARY_FAILURE).
+4. Temporary SMTP failures (4xx greylisting, rate limits, deferred responses) (reason: AMBIGUOUS_EVIDENCE).
+5. Valid syntax and configured MX records, but SMTP probing was not tested (reason: MAILBOX_UNCONFIRMED).
+   * RULE: Valid syntax + configured MX records alone does NOT confirm mailbox existence.
 
 Classification Rules:
 ---------------------
@@ -565,7 +600,14 @@ def classify(
             normalized_address=syntax.normalized,
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.SMTP_UNAVAILABLE.value,
-            explanation=f"SMTP verification could not be completed because outbound port 25 connection was blocked or unreachable from hosting environment: {smtp.reason}",
+            explanation=(
+                smtp.reason
+                if smtp.reason.startswith("SMTP verification is unavailable")
+                else (
+                    "SMTP verification is unavailable from the current hosting environment. "
+                    f"Syntax and DNS/MX checks were completed ({smtp.reason})."
+                )
+            ),
             syntax_validation=SyntaxValidation.VALID.value,
             dns_mx_validation=DNSValidation.CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.UNAVAILABLE.value,

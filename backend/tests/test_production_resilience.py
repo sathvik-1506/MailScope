@@ -740,3 +740,171 @@ def test_batch_with_different_outcomes(mock_check_smtp: MagicMock, mock_check_dn
     assert r2["verdict"] == "unknown"
     assert r2["verdict"] != "likely_bounce"
 
+
+@patch("backend.app.check_smtp")
+@patch("backend.app.check_dns")
+def test_automatic_analysis_without_smtp_flag(mock_check_dns, mock_check_smtp) -> None:
+    """Verifies that submitting addresses without smtp_enabled runs automatic analysis."""
+    from backend.services.smtp_checker import reset_environment_smtp_cache
+    reset_environment_smtp_cache()
+
+    mock_check_dns.return_value = DNSResult(
+        status=DNSStatus.HAS_MX,
+        state="passed",
+        domain="example.com",
+        mx_hosts=["mail.example.com"],
+        mx_status="found",
+        mx_hosts_resolve=True,
+        reason="Found MX record.",
+    )
+
+    mock_check_smtp.return_value = SMTPResult(
+        status=SMTPStatus.INCONCLUSIVE,
+        address="user@example.com",
+        is_blocked=True,
+        is_network_unreachable=True,
+        error_code="SMTP_UNAVAILABLE",
+        reason="Connection to 93.184.216.34:25 failed: [Errno 101] Network is unreachable",
+    )
+
+    app = create_app()
+    client = app.test_client()
+
+    # Submit payload WITHOUT smtp_enabled flag (clean single-click user submission)
+    resp = client.post("/api/analyze", json={"addresses": ["user@example.com"]})
+    assert resp.status_code == 200
+    data = resp.get_json()
+
+    # Ensure SMTP check was automatically triggered
+    assert mock_check_smtp.called
+    assert mock_check_smtp.call_args[1]["enabled"] is True
+
+    result = data["results"][0]
+    assert result["syntax_validation"] == "VALID"
+    assert result["dns_mx_validation"] == "CONFIGURED"
+    assert result["smtp_probe"] == "UNAVAILABLE"
+    assert result["mailbox_existence"] == "UNCONFIRMED"
+    assert result["verdict"] == "unknown"
+    assert "SMTP verification is unavailable from the current hosting environment" in result["explanation"]
+
+
+def test_environment_smtp_unavailability_caching() -> None:
+    """Verifies that environment-level port 25 block is cached briefly to avoid redundant timeouts."""
+    from backend.services.smtp_checker import (
+        check_smtp,
+        record_environment_smtp_unavailability,
+        reset_environment_smtp_cache,
+        get_environment_smtp_unavailability,
+    )
+
+    reset_environment_smtp_cache()
+    is_blocked, _ = get_environment_smtp_unavailability()
+    assert is_blocked is False
+
+    # Simulate environment block
+    record_environment_smtp_unavailability("Errno 101 Network is unreachable on port 25")
+    is_blocked, reason = get_environment_smtp_unavailability()
+    assert is_blocked is True
+    assert "Errno 101" in reason
+
+    # Calling check_smtp with enabled=True should short-circuit and return UNAVAILABLE immediately
+    res = check_smtp("cached@example.com", mx_host="mail.example.com", enabled=True)
+    assert res.status == SMTPStatus.INCONCLUSIVE
+    assert res.is_blocked is True
+    assert res.is_network_unreachable is True
+    assert res.error_code == "SMTP_UNAVAILABLE"
+    assert "SMTP verification is unavailable from the current hosting environment" in res.reason
+
+    reset_environment_smtp_cache()
+    is_blocked_after, _ = get_environment_smtp_unavailability()
+    assert is_blocked_after is False
+
+
+@patch("backend.app.check_smtp")
+@patch("backend.app.check_dns")
+def test_dashboard_counter_consistency_with_mixed_batch(mock_check_dns, mock_check_smtp) -> None:
+    """Verifies that aggregate counts and dashboard counters remain consistent with individual row verdicts."""
+    from backend.services.smtp_checker import reset_environment_smtp_cache
+    reset_environment_smtp_cache()
+
+    def side_effect_dns(domain: str) -> DNSResult:
+        if domain == "nxdomain.com":
+            return DNSResult(
+                status=DNSStatus.NO_RECORDS,
+                domain=domain,
+                reason="Domain not found.",
+            )
+        elif domain == "timeout.com":
+            return DNSResult(
+                status=DNSStatus.TIMEOUT,
+                domain=domain,
+                reason="DNS query timed out.",
+            )
+        return DNSResult(
+            status=DNSStatus.HAS_MX,
+            domain=domain,
+            mx_hosts=[f"mail.{domain}"],
+            reason="Found MX record.",
+        )
+
+    def side_effect_smtp(address: str, mx_host: str, enabled: bool, mx_hosts: list[str] | None = None) -> SMTPResult:
+        if "accepted" in address:
+            return SMTPResult(
+                status=SMTPStatus.ACCEPTED,
+                address=address,
+                smtp_code=250,
+                reason="Recipient acknowledged.",
+            )
+        elif "rejected" in address:
+            return SMTPResult(
+                status=SMTPStatus.REJECTED,
+                address=address,
+                smtp_code=550,
+                reason="Mailbox not found.",
+            )
+        return SMTPResult(
+            status=SMTPStatus.INCONCLUSIVE,
+            address=address,
+            is_blocked=True,
+            is_network_unreachable=True,
+            error_code="SMTP_UNAVAILABLE",
+            reason="Outbound port 25 connection refused.",
+        )
+
+    mock_check_dns.side_effect = side_effect_dns
+    mock_check_smtp.side_effect = side_effect_smtp
+
+    app = create_app()
+    client = app.test_client()
+
+    batch = [
+        "bad-syntax@@invalid",                # bounce (syntax)
+        "user@nxdomain.com",                  # bounce (NXDOMAIN)
+        "rejected@example.com",               # bounce (SMTP 550)
+        "accepted@example.com",               # delivered (SMTP 250)
+        "portblocked@example.com",            # unknown (SMTP unavailable)
+        "user@timeout.com",                   # unknown (DNS timeout)
+    ]
+
+    resp = client.post("/api/analyze", json={"addresses": batch})
+    assert resp.status_code == 200
+    data = resp.get_json()
+
+    results = data["results"]
+    assert len(results) == 6
+
+    delivered = sum(1 for r in results if r["verdict"] == "likely_delivered")
+    bounces = sum(1 for r in results if r["verdict"] == "likely_bounce")
+    unknowns = sum(1 for r in results if r["verdict"] == "unknown")
+
+    assert delivered == 1
+    assert bounces == 3
+    assert unknowns == 2
+
+    # Verify SMTP unavailable is in unknowns, NEVER bounces
+    port_blocked_row = next(r for r in results if "portblocked" in r["address"])
+    assert port_blocked_row["verdict"] == "unknown"
+    assert port_blocked_row["smtp_probe"] == "UNAVAILABLE"
+    assert port_blocked_row["mailbox_existence"] == "UNCONFIRMED"
+
+

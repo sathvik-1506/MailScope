@@ -369,7 +369,7 @@ export async function analyzeAddresses(
       },
       body: JSON.stringify({
         addresses: payload.addresses,
-        smtp_enabled: payload.smtp_enabled ?? false,
+        smtp_enabled: payload.smtp_enabled ?? true,
       }),
       signal: controller.signal,
     });

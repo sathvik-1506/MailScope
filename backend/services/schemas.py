@@ -26,7 +26,7 @@ class APIValidationError(Exception):
 @dataclass(frozen=True)
 class AnalysisRequestPayload:
     addresses: list[str]
-    smtp_enabled: bool = False
+    smtp_enabled: bool = True
 
 
 def get_max_batch_size() -> int:
@@ -87,13 +87,13 @@ def validate_analysis_request(data: Any) -> AnalysisRequestPayload:
             )
         validated_addresses.append(stripped)
 
-    # Validate optional smtp_enabled flag
-    smtp_enabled = False
-    if "smtp_enabled" in data:
-        val = data["smtp_enabled"]
-        if not isinstance(val, bool):
+    # Validate optional smtp_enabled flag (defaults to True for automatic execution)
+    smtp_enabled = True
+    raw_smtp = data.get("smtp_enabled") if "smtp_enabled" in data else data.get("enable_smtp")
+    if raw_smtp is not None:
+        if not isinstance(raw_smtp, bool):
             raise APIValidationError("Field 'smtp_enabled' must be a boolean.", code="INVALID_SMTP_FLAG")
-        smtp_enabled = val
+        smtp_enabled = raw_smtp
 
     return AnalysisRequestPayload(addresses=validated_addresses, smtp_enabled=smtp_enabled)
 

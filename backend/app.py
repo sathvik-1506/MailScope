@@ -56,7 +56,7 @@ def get_max_workers() -> int:
 
 def verify_single_address(
     address: str,
-    smtp_enabled: bool = False,
+    smtp_enabled: bool = True,
     dns_cache: dict[str, DNSResult] | None = None,
 ) -> ClassificationResult:
     """Verifies a single email address across the multi-layer pipeline."""

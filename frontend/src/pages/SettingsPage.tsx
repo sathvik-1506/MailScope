@@ -23,7 +23,6 @@ export default function SettingsPage() {
   const { batchHistory, clearHistory } = useAnalysis();
 
   // Verification preferences stored in local component state
-  const [defaultSmtp, setDefaultSmtp] = useState(false);
   const [autoExport, setAutoExport] = useState(false);
 
   // Deletion confirmation state
@@ -112,28 +111,21 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4 pt-1">
-            {/* SMTP Probing Default Toggle */}
+            {/* Automatic Multi-Stage Verification Policy */}
             <div className="flex items-start justify-between gap-4 py-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <label htmlFor="default-smtp-toggle" className="text-sm font-medium text-text-primary block cursor-pointer">
-                    Default SMTP Mailbox Probing
-                  </label>
-                  <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono text-amber-500 border border-amber-500/20">
-                    Disabled by Default
+                  <span className="text-sm font-medium text-text-primary block">
+                    Automatic Multi-Stage Verification
+                  </span>
+                  <span className="rounded bg-brand-500/10 px-2 py-0.5 text-[10px] font-mono text-brand-400 border border-brand-500/20">
+                    Fully Automatic
                   </span>
                 </div>
                 <p className="text-xs text-text-muted mt-1 max-w-xl leading-relaxed">
-                  SMTP handshake verification (<code className="text-brand-400">RCPT TO</code>) is intentionally <strong>disabled by default</strong> in both frontend and backend configurations. This prevents outbound port 25 blocking by cloud hosts, eliminates IP reputation risks from honeypots, and ensures fast evaluation times. Enable this option only when authoritative mailbox confirmation is required.
+                  Mailora automatically executes all verification stages (syntax validation, DNS/MX routing checks, and non-disruptive <code className="text-brand-400">RCPT TO</code> probes where supported). When outbound port 25 is restricted by the cloud hosting environment, Mailora automatically detects this, surfaces a clear explanation, and records mailbox existence as Unconfirmed without falsely marking addresses as bounced.
                 </p>
               </div>
-              <input
-                id="default-smtp-toggle"
-                type="checkbox"
-                checked={defaultSmtp}
-                onChange={(e) => setDefaultSmtp(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-border-default bg-surface-primary text-brand-500 focus:ring-brand-400 cursor-pointer"
-              />
             </div>
 
             {/* Auto-export flag */}

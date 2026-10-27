@@ -1,4 +1,4 @@
-import { useState, useId } from "react";
+import { useId } from "react";
 import {
   Sparkles,
   Trash2,
@@ -13,7 +13,7 @@ import { SAMPLE_INPUT_BATCH, parseInputAddresses } from "../../services/analyzer
 interface AddressInputSectionProps {
   input: string;
   onChangeInput: (val: string) => void;
-  onAnalyze: (addresses: string[], smtpEnabled: boolean) => void;
+  onAnalyze: (addresses: string[]) => void;
   isLoading: boolean;
   progressPercent: number;
   progressStep: string;
@@ -27,9 +27,7 @@ export default function AddressInputSection({
   progressPercent,
   progressStep,
 }: AddressInputSectionProps) {
-  const [smtpEnabled, setSmtpEnabled] = useState(false);
   const textareaId = useId();
-  const smtpToggleId = useId();
 
   const parsedAddresses = parseInputAddresses(input);
   const count = parsedAddresses.length;
@@ -48,7 +46,7 @@ export default function AddressInputSection({
     e.preventDefault();
     // Prevent duplicate submissions while request is in flight or input empty
     if (count === 0 || isLoading) return;
-    onAnalyze(parsedAddresses, smtpEnabled);
+    onAnalyze(parsedAddresses);
   };
 
   return (
@@ -134,33 +132,14 @@ export default function AddressInputSection({
 
         {/* Configuration Options & Submission Bar */}
         <div className="mt-5 pt-4 border-t border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-6">
-            {/* SMTP Probing Toggle */}
-            <label
-              htmlFor={smtpToggleId}
-              className="flex items-center gap-2.5 text-xs text-text-secondary cursor-pointer select-none"
-            >
-              <input
-                id={smtpToggleId}
-                type="checkbox"
-                checked={smtpEnabled}
-                onChange={(e) => setSmtpEnabled(e.target.checked)}
-                disabled={isLoading}
-                className="h-4 w-4 rounded border-border-default bg-surface-primary text-brand-500 focus:ring-brand-400 focus:ring-offset-0 cursor-pointer disabled:cursor-not-allowed"
-              />
-              <span className="font-medium text-text-primary">
-                Enable Optional SMTP Probing
-              </span>
-              <span
-                className={`rounded px-1.5 py-0.5 text-[10px] font-mono border ${
-                  smtpEnabled
-                    ? "bg-brand-500/10 text-brand-400 border-brand-500/20"
-                    : "bg-surface-elevated text-text-muted border-border-subtle"
-                }`}
-              >
-                {smtpEnabled ? "Active (RCPT TO only)" : "Disabled (Default)"}
-              </span>
-            </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20 text-xs font-medium">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Full Multi-Stage Pipeline (Automatic)</span>
+            </span>
+            <span className="text-xs text-text-muted">
+              Syntax, DNS/MX, and safe mailbox probing executed automatically
+            </span>
           </div>
 
           {/* Action button */}
@@ -193,7 +172,7 @@ export default function AddressInputSection({
         <div className="mt-4 flex items-start gap-2 rounded-lg bg-surface-primary/70 border border-border-subtle p-3 text-xs text-text-muted">
           <ShieldCheck className="h-4 w-4 shrink-0 text-brand-400 mt-0.5" aria-hidden="true" />
           <p className="leading-relaxed">
-            <strong className="text-text-secondary">Verification Engine:</strong> Addresses are submitted directly to the {BRAND.name} backend. Syntax and DNS resolution are evaluated for every address. When SMTP probing is enabled, recipient handshakes are evaluated safely without ever sending email.
+            <strong className="text-text-secondary">Verification Engine:</strong> Addresses are submitted directly to the {BRAND.name} backend. Full multi-stage verification (syntax validation, DNS/MX mail-routing checks, and safe recipient probing where supported by the hosting environment) is evaluated automatically without ever sending email.
           </p>
         </div>
 

@@ -256,4 +256,31 @@ describe("Frontend API Client Mapping", () => {
     assert.equal(detailed.syntaxStatus, "passed");
     assert.equal(detailed.smtpStatus, "unavailable");
   });
+
+  it("handles automatic analysis result and formats hosting explanation clearly", () => {
+    const autoResult: BackendAddressResult = {
+      address: "hello@domain.com",
+      verdict: "unknown",
+      reason_code: "SMTP_UNAVAILABLE",
+      explanation: "SMTP verification is unavailable from the current hosting environment. Syntax and DNS/MX checks were completed (port 25 blocked).",
+      syntax_validation: "VALID",
+      dns_mx_validation: "CONFIGURED",
+      smtp_probe: "UNAVAILABLE",
+      mailbox_existence: "UNCONFIRMED",
+      syntax_evidence: { valid: true, reason: "Valid syntax." },
+      dns_evidence: { status: "has_mx", domain: "domain.com", mx_hosts: ["mail.domain.com"], reason: "MX found" },
+      smtp_evidence: { status: "unavailable", reason: "Port 25 blocked" },
+      checks_run: ["syntax", "dns", "smtp"],
+      evidence: ["Syntax valid", "MX active"],
+      limitations: ["SMTP unavailable in hosting environment."],
+    };
+
+    const detailed = mapBackendToDetailedResult(autoResult, 0);
+    assert.equal(detailed.verdict, "unknown");
+    assert.equal(detailed.syntaxValidation, "VALID");
+    assert.equal(detailed.dnsMxValidation, "CONFIGURED");
+    assert.equal(detailed.smtpProbe, "UNAVAILABLE");
+    assert.equal(detailed.mailboxExistence, "UNCONFIRMED");
+    assert.match(detailed.reason, /SMTP verification is unavailable from the current hosting environment/);
+  });
 });

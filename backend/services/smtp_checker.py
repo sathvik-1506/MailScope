@@ -25,8 +25,42 @@ import ipaddress
 import smtplib
 import socket
 import ssl
+import threading
+import time
 from dataclasses import dataclass
 from enum import Enum
+
+_ENV_UNAVAILABLE_UNTIL: float = 0.0
+_ENV_UNAVAILABLE_LOCK = threading.Lock()
+_ENV_UNAVAILABLE_REASON: str = ""
+_ENV_CACHE_TTL_SECONDS: float = 120.0  # 2 minutes TTL for environment network-level restriction
+
+
+def get_environment_smtp_unavailability() -> tuple[bool, str]:
+    """Check if the local hosting environment is currently known to block outbound port 25."""
+    global _ENV_UNAVAILABLE_UNTIL, _ENV_UNAVAILABLE_REASON
+    with _ENV_UNAVAILABLE_LOCK:
+        now = time.monotonic()
+        if now < _ENV_UNAVAILABLE_UNTIL:
+            return True, _ENV_UNAVAILABLE_REASON
+        return False, ""
+
+
+def record_environment_smtp_unavailability(reason: str, ttl: float = _ENV_CACHE_TTL_SECONDS) -> None:
+    """Record that the current hosting environment has blocked outbound port 25."""
+    global _ENV_UNAVAILABLE_UNTIL, _ENV_UNAVAILABLE_REASON
+    with _ENV_UNAVAILABLE_LOCK:
+        _ENV_UNAVAILABLE_UNTIL = time.monotonic() + ttl
+        _ENV_UNAVAILABLE_REASON = reason
+
+
+def reset_environment_smtp_cache() -> None:
+    """Reset the environment-level SMTP unavailability cache (useful for testing)."""
+    global _ENV_UNAVAILABLE_UNTIL, _ENV_UNAVAILABLE_REASON
+    with _ENV_UNAVAILABLE_LOCK:
+        _ENV_UNAVAILABLE_UNTIL = 0.0
+        _ENV_UNAVAILABLE_REASON = ""
+
 
 
 class SMTPStatus(str, Enum):
@@ -223,6 +257,21 @@ def check_smtp(
             reason="SMTP verification is disabled. Enable it explicitly if needed.",
         )
 
+    # Check if the hosting environment has already demonstrated an outbound port 25 restriction
+    is_env_unavail, env_reason = get_environment_smtp_unavailability()
+    if is_env_unavail:
+        return SMTPResult(
+            status=SMTPStatus.INCONCLUSIVE,
+            address=address,
+            is_blocked=True,
+            is_network_unreachable=True,
+            error_code="SMTP_UNAVAILABLE",
+            reason=(
+                "SMTP verification is unavailable from the current hosting environment. "
+                f"Syntax and DNS/MX checks were completed ({env_reason})."
+            ),
+        )
+
     # Determine list of MX hosts to inspect
     hosts_to_probe: list[str] = []
     if mx_hosts is not None:
@@ -370,6 +419,10 @@ def check_smtp(
                         except Exception:
                             pass
 
+        if is_any_network_unreachable:
+            # Environment network is unreachable on port 25; avoid stalling on subsequent hosts
+            break
+
     # All candidate connections failed or were inconclusive
     is_blocked_final = is_any_blocked or is_any_network_unreachable
     is_timeout_final = is_any_timeout and not is_blocked_final
@@ -380,6 +433,8 @@ def check_smtp(
             f"Outbound SMTP port 25 connection was blocked or unreachable across candidate hosts ({last_error_reason}). "
             "Cloud hosting environments (such as Render) typically restrict outbound port 25."
         )
+        if is_any_network_unreachable or "blocked" in last_error_reason.lower() or "refused" in last_error_reason.lower():
+            record_environment_smtp_unavailability(last_error_reason)
     elif is_timeout_final:
         final_error_code = "SMTP_TIMEOUT"
         final_reason = f"SMTP probe timed out across all candidates: {last_error_reason}"

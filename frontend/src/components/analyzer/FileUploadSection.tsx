@@ -17,7 +17,7 @@ import { extractEmailsFromFiles, APIClientError } from "../../services/api";
 import type { ExtractedCandidate, ExtractionResponse, ExtractionFileReport } from "../../types";
 
 interface FileUploadSectionProps {
-  onAnalyzeAddresses: (addresses: string[], smtpEnabled: boolean) => void;
+  onAnalyzeAddresses: (addresses: string[]) => void;
   onAppendToManualInput: (addresses: string[]) => void;
   isLoadingAnalysis: boolean;
 }
@@ -58,9 +58,6 @@ export default function FileUploadSection({
   // Quick Manual Add State
   const [manualAddressInput, setManualAddressInput] = useState("");
   const [manualAddError, setManualAddError] = useState<string | null>(null);
-
-  // Options
-  const [smtpEnabled, setSmtpEnabled] = useState(false);
 
   // File Validation Helper
   const validateAndFilterFiles = (incoming: File[]): { valid: File[]; errors: string[] } => {
@@ -300,7 +297,7 @@ export default function FileUploadSection({
   const handleProceedToVerification = () => {
     const toSend = getActiveAddresses();
     if (toSend.length > 0) {
-      onAnalyzeAddresses(toSend, smtpEnabled);
+      onAnalyzeAddresses(toSend);
     }
   };
 
@@ -722,17 +719,6 @@ export default function FileUploadSection({
                 {/* Final Confirmation & Workflow Launch Bar */}
                 <div className="pt-3 border-t border-border-subtle flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-4">
-                    {/* SMTP Toggle */}
-                    <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={smtpEnabled}
-                        onChange={(e) => setSmtpEnabled(e.target.checked)}
-                        disabled={isLoadingAnalysis}
-                        className="h-3.5 w-3.5 rounded border-border-default text-brand-500 focus:ring-brand-400 cursor-pointer"
-                      />
-                      <span>Enable SMTP Probing</span>
-                    </label>
 
                     <button
                       type="button"

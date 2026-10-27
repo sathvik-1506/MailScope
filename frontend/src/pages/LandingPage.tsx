@@ -156,13 +156,13 @@ const STEPS = [
     num: "01",
     icon: Upload,
     title: "Submit addresses",
-    desc: "Paste a batch of email addresses or upload a list. Choose whether to enable optional SMTP probing.",
+    desc: "Paste a batch of email addresses or upload a list. Mailora automatically executes all verification checks in one click.",
   },
   {
     num: "02",
     icon: Search,
     title: "Multi-layer analysis",
-    desc: `${BRAND.name} validates syntax, queries DNS for MX records, and (optionally) probes SMTP — without ever sending a message.`,
+    desc: `${BRAND.name} automatically validates syntax, queries DNS for MX records, and probes SMTP safely — without ever sending a message.`,
   },
   {
     num: "03",
@@ -315,8 +315,8 @@ const PRIVACY_ITEMS = [
   },
   {
     icon: EyeOff,
-    title: "SMTP is opt-in",
-    desc: "SMTP probing is disabled by default. You explicitly choose when to enable it, and blocked connections are treated as inconclusive.",
+    title: "Safe automated probing",
+    desc: "SMTP probing is performed safely and automatically without sending emails. Blocked connections in restricted hosting environments are treated as inconclusive, never as false bounces.",
   },
 ];
 

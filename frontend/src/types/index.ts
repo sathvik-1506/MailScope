@@ -35,7 +35,7 @@ export interface CheckItem {
 export interface AnalysisRequest {
   /** Raw email addresses to analyse – one per element. */
   addresses: string[];
-  /** Whether to run SMTP probing. Defaults to false on the backend. */
+  /** Whether to run SMTP probing. Defaults to true (automatic execution). */
   smtp_enabled?: boolean;
 }
 

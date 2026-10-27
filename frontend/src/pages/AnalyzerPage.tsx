@@ -46,7 +46,7 @@ export default function AnalyzerPage() {
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
 
   // Core Real API Submission Handler
-  const handleAnalyze = async (addresses: string[], smtpEnabled: boolean) => {
+  const handleAnalyze = async (addresses: string[], smtpEnabled = true) => {
     if (isLoading || addresses.length === 0) return;
 
     lastRequestRef.current = { addresses, smtpEnabled };
@@ -64,11 +64,7 @@ export default function AnalyzerPage() {
 
     const progressTimer2 = setTimeout(() => {
       setProgressPercent(80);
-      setProgressStep(
-        smtpEnabled
-          ? "Probing SMTP recipient handshakes and evaluating catch-all signals..."
-          : "Compiling Evidence Ledger and verdict classifications..."
-      );
+      setProgressStep("Evaluating mail routing and performing safe recipient probing...");
     }, 450);
 
     try {
@@ -89,7 +85,7 @@ export default function AnalyzerPage() {
         deliveredCount: data.filter((r) => r.verdict === "likely_delivered").length,
         bounceCount: data.filter((r) => r.verdict === "likely_bounce").length,
         unknownCount: data.filter((r) => r.verdict === "unknown").length,
-        smtpProbed: smtpEnabled,
+        smtpProbed: true,
         results: data,
       });
 

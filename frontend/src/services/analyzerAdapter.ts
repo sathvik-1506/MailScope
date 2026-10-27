@@ -408,7 +408,7 @@ export async function runSimulatedAnalysis(
  */
 export async function executeLiveAnalysis(
   addresses: string[],
-  smtpEnabled = false
+  smtpEnabled = true
 ): Promise<DetailedAddressResult[]> {
   return analyzeAddresses({
     addresses,
