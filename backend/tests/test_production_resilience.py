@@ -391,7 +391,7 @@ def test_smtp_blocked_connection_maps_to_smtp_unavailable(
     c_res = classify(_make_syntax("example.com"), dns=dns_res, smtp=smtp_res)
     assert c_res.verdict == Verdict.UNKNOWN
     assert c_res.reason_code == ReasonCode.SMTP_UNAVAILABLE.value
-    assert "blocked or unreachable" in c_res.explanation.lower()
+    assert "outbound connection" in c_res.explanation.lower() or "blocked or unreachable" in c_res.explanation.lower()
 
 
 @patch("backend.services.smtp_checker.socket.getaddrinfo")
@@ -785,7 +785,7 @@ def test_automatic_analysis_without_smtp_flag(mock_check_dns, mock_check_smtp) -
     assert result["smtp_probe"] == "UNAVAILABLE"
     assert result["mailbox_existence"] == "UNCONFIRMED"
     assert result["verdict"] == "unknown"
-    assert "SMTP verification is unavailable from the current hosting environment" in result["explanation"]
+    assert "outbound connection" in result["explanation"] or "SMTP verification is unavailable" in result["explanation"]
 
 
 def test_environment_smtp_unavailability_caching() -> None:
@@ -906,5 +906,187 @@ def test_dashboard_counter_consistency_with_mixed_batch(mock_check_dns, mock_che
     assert port_blocked_row["verdict"] == "unknown"
     assert port_blocked_row["smtp_probe"] == "UNAVAILABLE"
     assert port_blocked_row["mailbox_existence"] == "UNCONFIRMED"
+
+
+def test_smtp_probing_mode_environment_variable(monkeypatch) -> None:
+    """Verifies that SMTP_PROBING_ENABLED config controls probing mode."""
+    from backend.services.smtp_checker import (
+        get_smtp_probing_mode,
+        check_smtp,
+        SMTPStatus,
+    )
+
+    monkeypatch.setenv("SMTP_PROBING_ENABLED", "false")
+    assert get_smtp_probing_mode() == "disabled"
+    res = check_smtp("test@example.com", mx_host="mail.example.com", enabled=True)
+    assert res.status == SMTPStatus.DISABLED
+    assert res.error_code == "SMTP_DISABLED"
+    assert "disabled by server configuration" in res.reason
+
+    monkeypatch.setenv("SMTP_PROBING_ENABLED", "0")
+    assert get_smtp_probing_mode() == "disabled"
+
+    monkeypatch.setenv("SMTP_PROBING_ENABLED", "true")
+    assert get_smtp_probing_mode() == "enabled"
+
+    monkeypatch.setenv("SMTP_PROBING_ENABLED", "auto")
+    assert get_smtp_probing_mode() == "auto"
+
+
+def test_independent_validation_dimensions_exhaustive() -> None:
+    """Verifies all five validation dimensions are separated and mutually consistent:
+    1. Syntax: Valid or Invalid
+    2. DNS/domain: Resolved, Not Resolved, or Unknown
+    3. Mail routing: Configured, Not Configured, or Unknown
+    4. SMTP probe: Available, Unavailable, Not Attempted, or Inconclusive
+    5. Mailbox existence: Confirmed, Unconfirmed, or Rejected
+    """
+    from backend.services.syntax_checker import check_syntax, SyntaxResult
+    from backend.services.dns_checker import DNSResult, DNSStatus
+    from backend.services.smtp_checker import SMTPResult, SMTPStatus
+    from backend.services.classifier import (
+        classify,
+        Verdict,
+        DNSDomainResolution,
+        MailRouting,
+        SyntaxValidation,
+        MailboxExistence,
+        SMTPProbeStatus,
+    )
+
+    # 1. Malformed syntax
+    bad_syn = check_syntax("not-an-email")
+    r1 = classify(bad_syn)
+    assert r1.syntax_validation == SyntaxValidation.INVALID.value
+    assert r1.dns_domain_resolution == DNSDomainResolution.UNKNOWN.value
+    assert r1.mail_routing == MailRouting.NOT_CONFIGURED.value
+    assert r1.smtp_probe == SMTPProbeStatus.NOT_TESTED.value
+    assert r1.mailbox_existence == MailboxExistence.INVALID.value
+    assert r1.verdict == Verdict.LIKELY_BOUNCE
+
+    # 2. Valid syntax + NXDOMAIN
+    good_syn = check_syntax("user@nonexistent.domain")
+    nx_dns = DNSResult(status=DNSStatus.NO_RECORDS, domain="nonexistent.domain", is_nxdomain=True, reason="NXDOMAIN")
+    r2 = classify(good_syn, dns=nx_dns)
+    assert r2.syntax_validation == SyntaxValidation.VALID.value
+    assert r2.dns_domain_resolution == DNSDomainResolution.NOT_RESOLVED.value
+    assert r2.mail_routing == MailRouting.NOT_CONFIGURED.value
+    assert r2.smtp_probe == SMTPProbeStatus.NOT_TESTED.value
+    assert r2.mailbox_existence == MailboxExistence.INVALID.value
+    assert r2.verdict == Verdict.LIKELY_BOUNCE
+
+    # 3. Valid syntax + Null MX (RFC 7505)
+    null_mx_dns = DNSResult(status=DNSStatus.NO_RECORDS, domain="nullmx.domain", is_null_mx=True, reason="Null MX")
+    r3 = classify(good_syn, dns=null_mx_dns)
+    assert r3.syntax_validation == SyntaxValidation.VALID.value
+    assert r3.dns_domain_resolution == DNSDomainResolution.RESOLVED.value
+    assert r3.mail_routing == MailRouting.NOT_CONFIGURED.value
+    assert r3.smtp_probe == SMTPProbeStatus.NOT_TESTED.value
+    assert r3.mailbox_existence == MailboxExistence.INVALID.value
+    assert r3.verdict == Verdict.LIKELY_BOUNCE
+
+    # 4. Valid syntax + No MX fallback to A record (RFC 5321 § 5.1)
+    fallback_a_dns = DNSResult(status=DNSStatus.HAS_A, domain="fallback.domain", has_implicit_mx=True, reason="Implicit MX via A")
+    r4 = classify(good_syn, dns=fallback_a_dns)
+    assert r4.syntax_validation == SyntaxValidation.VALID.value
+    assert r4.dns_domain_resolution == DNSDomainResolution.RESOLVED.value
+    assert r4.mail_routing == MailRouting.CONFIGURED.value
+    assert r4.smtp_probe == SMTPProbeStatus.NOT_TESTED.value
+    assert r4.mailbox_existence == MailboxExistence.UNCONFIRMED.value
+    assert r4.verdict == Verdict.UNKNOWN
+
+    # 5. Valid syntax + DNS Timeout
+    timeout_dns = DNSResult(status=DNSStatus.TIMEOUT, domain="timeout.domain", reason="Query timed out")
+    r5 = classify(good_syn, dns=timeout_dns)
+    assert r5.syntax_validation == SyntaxValidation.VALID.value
+    assert r5.dns_domain_resolution == DNSDomainResolution.UNKNOWN.value
+    assert r5.mail_routing == MailRouting.UNKNOWN.value
+    assert r5.smtp_probe == SMTPProbeStatus.NOT_TESTED.value
+    assert r5.mailbox_existence == MailboxExistence.UNKNOWN.value
+    assert r5.verdict == Verdict.UNKNOWN
+
+    # 6. Valid syntax + Usable MX + SMTP Network Unreachable (Errno 101)
+    valid_mx_dns = DNSResult(status=DNSStatus.HAS_MX, domain="example.com", mx_hosts=["mail.example.com"], reason="Valid MX")
+    unreach_smtp = SMTPResult(
+        status=SMTPStatus.INCONCLUSIVE,
+        address="user@example.com",
+        is_blocked=True,
+        is_network_unreachable=True,
+        error_code="SMTP_UNAVAILABLE",
+        reason="[Errno 101] Network is unreachable",
+    )
+    r6 = classify(good_syn, dns=valid_mx_dns, smtp=unreach_smtp)
+    assert r6.syntax_validation == SyntaxValidation.VALID.value
+    assert r6.dns_domain_resolution == DNSDomainResolution.RESOLVED.value
+    assert r6.mail_routing == MailRouting.CONFIGURED.value
+    assert r6.smtp_probe == SMTPProbeStatus.UNAVAILABLE.value
+    assert r6.mailbox_existence == MailboxExistence.UNCONFIRMED.value
+    assert r6.verdict == Verdict.UNKNOWN
+    assert "outbound connection" in r6.explanation
+    assert "does not mean the email address is invalid" in r6.explanation
+
+    # 7. Valid syntax + Usable MX + SMTP Connection Timeout
+    timeout_smtp = SMTPResult(
+        status=SMTPStatus.INCONCLUSIVE,
+        address="user@example.com",
+        is_timeout=True,
+        error_code="SMTP_TIMEOUT",
+        reason="Connection timed out",
+    )
+    r7 = classify(good_syn, dns=valid_mx_dns, smtp=timeout_smtp)
+    assert r7.syntax_validation == SyntaxValidation.VALID.value
+    assert r7.dns_domain_resolution == DNSDomainResolution.RESOLVED.value
+    assert r7.mail_routing == MailRouting.CONFIGURED.value
+    assert r7.smtp_probe == SMTPProbeStatus.TIMEOUT.value
+    assert r7.mailbox_existence == MailboxExistence.UNCONFIRMED.value
+    assert r7.verdict == Verdict.UNKNOWN
+
+    # 8. Valid syntax + Usable MX + SMTP Recipient Rejection (550)
+    reject_smtp = SMTPResult(
+        status=SMTPStatus.REJECTED,
+        address="user@example.com",
+        smtp_code=550,
+        error_code="SMTP_REJECTED",
+        reason="550 5.1.1 User unknown",
+    )
+    r8 = classify(good_syn, dns=valid_mx_dns, smtp=reject_smtp)
+    assert r8.syntax_validation == SyntaxValidation.VALID.value
+    assert r8.dns_domain_resolution == DNSDomainResolution.RESOLVED.value
+    assert r8.mail_routing == MailRouting.CONFIGURED.value
+    assert r8.smtp_probe == SMTPProbeStatus.REJECTED.value
+    assert r8.mailbox_existence == MailboxExistence.REJECTED.value
+    assert r8.verdict == Verdict.LIKELY_BOUNCE
+
+    # 9. Valid syntax + Usable MX + SMTP Recipient Acceptance (250)
+    accept_smtp = SMTPResult(
+        status=SMTPStatus.ACCEPTED,
+        address="user@example.com",
+        smtp_code=250,
+        error_code="SMTP_ACCEPTED",
+        reason="250 2.1.5 Recipient OK",
+    )
+    r9 = classify(good_syn, dns=valid_mx_dns, smtp=accept_smtp)
+    assert r9.syntax_validation == SyntaxValidation.VALID.value
+    assert r9.dns_domain_resolution == DNSDomainResolution.RESOLVED.value
+    assert r9.mail_routing == MailRouting.CONFIGURED.value
+    assert r9.smtp_probe == SMTPProbeStatus.SUCCESS.value
+    assert r9.mailbox_existence == MailboxExistence.CONFIRMED.value
+    assert r9.verdict == Verdict.LIKELY_DELIVERED
+
+    # 10. Valid syntax + Usable MX + SMTP Temporary Failure (451)
+    temp_smtp = SMTPResult(
+        status=SMTPStatus.INCONCLUSIVE,
+        address="user@example.com",
+        smtp_code=451,
+        error_code="SMTP_TEMPORARY_FAILURE",
+        reason="451 4.7.1 Greylisted, try again later",
+    )
+    r10 = classify(good_syn, dns=valid_mx_dns, smtp=temp_smtp)
+    assert r10.syntax_validation == SyntaxValidation.VALID.value
+    assert r10.dns_domain_resolution == DNSDomainResolution.RESOLVED.value
+    assert r10.mail_routing == MailRouting.CONFIGURED.value
+    assert r10.mailbox_existence == MailboxExistence.UNCONFIRMED.value
+    assert r10.verdict == Verdict.UNKNOWN
+
 
 

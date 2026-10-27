@@ -195,6 +195,9 @@ Mailora features an application-wide appearance system:
 | `PORT` | `5000` | Port for Flask / Gunicorn server. |
 | `FLASK_ENV` | `development` | Set to `production` in live environments. |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | Allowed CORS origin(s). Comma-separated for multiple origins. |
+| `SMTP_PROBING_ENABLED` | `auto` | Outbound SMTP port 25 probing mode: `auto` (detects egress blocks automatically), `false` (disables socket probes immediately), `true`. |
+| `SMTP_TIMEOUT_SECONDS` | `3.0` | Bounded socket timeout for SMTP connections (1.0s to 10.0s). |
+| `SMTP_CACHE_TTL_SECONDS` | `120.0` | In-memory cache TTL in seconds for network unreachability (Errno 101) to prevent socket stalls. |
 | `MAX_BATCH_SIZE` | `100` | Maximum email addresses permitted per API batch request. |
 | `SQLITE_PATH` | `data/mailora_history.db` | Filepath for SQLite history database (or `:memory:`). |
 | `HISTORY_RETENTION_DAYS` | `30` | Number of days to retain server-side run metadata before auto-purging. |
@@ -274,14 +277,14 @@ Permanently clears all analysis run records from the history database.
 ## 12. Automated Testing & Quality Validation
 
 ### Backend Pytest Suite
-Runs **182 unit and integration tests** covering syntax parsing, DNS resolution scenarios, dual-stack MX IP resolution, Null MX (RFC 7505), implicit A/AAAA fallback (RFC 5321 § 5.1), SPF/DMARC extraction, SMTP state transitions, network unreachable handling, port 25 block classification, SSRF fail-closed rejection, document extraction, history persistence, pagination, retention purging, and HTTP error status codes:
+Runs **189 unit and integration tests** covering syntax parsing, DNS resolution scenarios, dual-stack MX IP resolution, Null MX (RFC 7505), implicit A/AAAA fallback (RFC 5321 § 5.1), SPF/DMARC extraction, SMTP state transitions, network unreachable handling, port 25 block classification, SSRF fail-closed rejection, document extraction, history persistence, pagination, retention purging, and HTTP error status codes:
 ```bash
 pytest backend/tests
 ```
-**Outcome**: 182 passed, 0 failures.
+**Outcome**: 189 passed, 0 failures.
 
 ### Frontend Test Suite
-Runs **77 unit tests across 17 test suites** verifying address parsing, CWE-1236 CSV formula injection defense, filter/search consistency, API client mapping, document extraction, theme persistence, and history ledger management:
+Runs **79 unit tests across 17 test suites** verifying address parsing, CWE-1236 CSV formula injection defense, filter/search consistency, API client mapping, document extraction, theme persistence, and history ledger management:
 ```bash
 cd frontend
 npm test

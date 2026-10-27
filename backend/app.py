@@ -181,10 +181,12 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     @app.get("/health")
     def health():
+        from .services.smtp_checker import get_smtp_probing_mode
         return jsonify({
             "status": "ok",
             "service": "mailora-backend",
             "version": "1.0.0",
+            "smtp_probing_mode": get_smtp_probing_mode(),
         })
 
     # ------------------------------------------------------------------

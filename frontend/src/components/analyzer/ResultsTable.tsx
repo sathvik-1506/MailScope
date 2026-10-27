@@ -143,7 +143,10 @@ export default function ResultsTable({
                 Syntax
               </th>
               <th scope="col" className="px-3 py-3.5 text-center">
-                DNS / MX
+                DNS Domain
+              </th>
+              <th scope="col" className="px-3 py-3.5 text-center">
+                Mail Routing
               </th>
               <th scope="col" className="px-3 py-3.5 text-center">
                 SMTP Probe
@@ -163,30 +166,37 @@ export default function ResultsTable({
             {sorted.map((row) => {
               const meta = VERDICT_META[row.verdict];
               const isSyntaxValid = row.syntaxValidation === "VALID" || row.syntaxStatus === "passed";
-              const isDnsConfigured = row.dnsMxValidation === "CONFIGURED" || row.dnsStatus === "passed";
-              const isDnsNotConfigured = row.dnsMxValidation === "NOT_CONFIGURED" || row.dnsStatus === "failed";
+              const isDnsResolved = row.dnsDomainResolution === "RESOLVED" || (row.dnsStatus === "passed" && row.dnsDomainResolution !== "NOT_RESOLVED");
+              const isDnsNotResolved = row.dnsDomainResolution === "NOT_RESOLVED" || (row.dnsStatus === "failed" && row.reasonCode === "DOMAIN_NOT_FOUND");
+              const dnsDomainStatus = isDnsResolved ? "passed" : isDnsNotResolved ? "failed" : "inconclusive";
+              const dnsDomainLabel = isDnsResolved ? "Resolved" : isDnsNotResolved ? "Not Resolved" : "Unknown";
+
+              const isRoutingConfigured = row.mailRouting === "CONFIGURED" || row.dnsMxValidation === "CONFIGURED" || row.routingStatus === "passed";
+              const isRoutingNotConfigured = row.mailRouting === "NOT_CONFIGURED" || row.dnsMxValidation === "NOT_CONFIGURED" || row.routingStatus === "failed";
+              const routingPillStatus = isRoutingConfigured ? "passed" : isRoutingNotConfigured ? "failed" : "inconclusive";
+              const routingPillLabel = isRoutingConfigured ? "Configured" : isRoutingNotConfigured ? "Not Configured" : "Unknown";
               
               const smtpStatus =
-                row.smtpProbe === "SUCCESS" || row.smtpStatus === "passed"
+                row.smtpProbe === "SUCCESS" || row.smtpProbe === "AVAILABLE" || row.smtpStatus === "passed"
                   ? "passed"
                   : row.smtpProbe === "REJECTED" || row.smtpStatus === "failed"
                   ? "failed"
                   : row.smtpProbe === "UNAVAILABLE" || row.smtpStatus === "unavailable"
                   ? "unavailable"
-                  : row.smtpProbe === "TIMEOUT" || row.smtpStatus === "inconclusive"
+                  : row.smtpProbe === "TIMEOUT" || row.smtpProbe === "INCONCLUSIVE" || row.smtpStatus === "inconclusive"
                   ? "inconclusive"
                   : "skipped";
 
               const smtpLabel =
-                row.smtpProbe === "SUCCESS" || row.smtpStatus === "passed"
-                  ? "Success"
+                row.smtpProbe === "SUCCESS" || row.smtpProbe === "AVAILABLE" || row.smtpStatus === "passed"
+                  ? "Available"
                   : row.smtpProbe === "REJECTED" || row.smtpStatus === "failed"
                   ? "Rejected"
                   : row.smtpProbe === "UNAVAILABLE" || row.smtpStatus === "unavailable"
                   ? "Unavailable"
-                  : row.smtpProbe === "TIMEOUT" || row.smtpStatus === "inconclusive"
-                  ? "Timeout"
-                  : "Not Tested";
+                  : row.smtpProbe === "TIMEOUT" || row.smtpProbe === "INCONCLUSIVE" || row.smtpStatus === "inconclusive"
+                  ? "Inconclusive"
+                  : "Not Attempted";
 
               const mailboxStatus =
                 row.mailboxExistence === "CONFIRMED"
@@ -257,8 +267,15 @@ export default function ResultsTable({
                   </td>
                   <td className="px-3 py-3.5 text-center whitespace-nowrap">
                     <CheckStatusPill
-                      status={isDnsConfigured ? "passed" : isDnsNotConfigured ? "failed" : "inconclusive"}
-                      label={isDnsConfigured ? "Configured" : isDnsNotConfigured ? "Not Configured" : "Unknown"}
+                      status={dnsDomainStatus}
+                      label={dnsDomainLabel}
+                      compact
+                    />
+                  </td>
+                  <td className="px-3 py-3.5 text-center whitespace-nowrap">
+                    <CheckStatusPill
+                      status={routingPillStatus}
+                      label={routingPillLabel}
                       compact
                     />
                   </td>

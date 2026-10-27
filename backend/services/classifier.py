@@ -147,6 +147,18 @@ class SyntaxValidation(str, Enum):
     INVALID = "INVALID"
 
 
+class DNSDomainResolution(str, Enum):
+    RESOLVED = "RESOLVED"
+    NOT_RESOLVED = "NOT_RESOLVED"
+    UNKNOWN = "UNKNOWN"
+
+
+class MailRouting(str, Enum):
+    CONFIGURED = "CONFIGURED"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    UNKNOWN = "UNKNOWN"
+
+
 class DNSValidation(str, Enum):
     CONFIGURED = "CONFIGURED"
     NOT_CONFIGURED = "NOT_CONFIGURED"
@@ -177,6 +189,8 @@ class ClassificationResult:
     explanation: str
     normalized_address: str | None = None
     syntax_validation: str = "VALID"
+    dns_domain_resolution: str = "RESOLVED"
+    mail_routing: str = "CONFIGURED"
     dns_mx_validation: str = "CONFIGURED"
     smtp_probe: str = "NOT_TESTED"
     mailbox_existence: str = "UNCONFIRMED"
@@ -202,6 +216,8 @@ class ClassificationResult:
             "reason_code": self.reason_code,
             "explanation": self.explanation,
             "syntax_validation": self.syntax_validation,
+            "dns_domain_resolution": self.dns_domain_resolution,
+            "mail_routing": self.mail_routing,
             "dns_mx_validation": self.dns_mx_validation,
             "smtp_probe": self.smtp_probe,
             "mailbox_existence": self.mailbox_existence,
@@ -258,6 +274,8 @@ def classify(
             reason_code=ReasonCode.INVALID_SYNTAX.value,
             explanation=f"Email address syntax violates RFC specifications: {syntax.reason}",
             syntax_validation=SyntaxValidation.INVALID.value,
+            dns_domain_resolution=DNSDomainResolution.UNKNOWN.value,
+            mail_routing=MailRouting.NOT_CONFIGURED.value,
             dns_mx_validation=DNSValidation.NOT_CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
             mailbox_existence=MailboxExistence.INVALID.value,
@@ -285,6 +303,8 @@ def classify(
             reason_code=ReasonCode.CHECKS_NOT_ATTEMPTED.value,
             explanation="DNS check was not performed; domain resolution and routing were not attempted.",
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.UNKNOWN.value,
+            mail_routing=MailRouting.UNKNOWN.value,
             dns_mx_validation=DNSValidation.UNKNOWN.value,
             smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
             mailbox_existence=MailboxExistence.UNKNOWN.value,
@@ -345,6 +365,8 @@ def classify(
             reason_code=ReasonCode.AMBIGUOUS_EVIDENCE.value,
             explanation=f"Conflicting technical evidence: DNS reported '{dns.status.value}' but SMTP reported '{smtp.status.value}'.",
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.UNKNOWN.value,
+            mail_routing=MailRouting.UNKNOWN.value,
             dns_mx_validation=DNSValidation.UNKNOWN.value,
             smtp_probe=SMTPProbeStatus.SUCCESS.value if smtp.status == SMTPStatus.ACCEPTED else SMTPProbeStatus.REJECTED.value,
             mailbox_existence=MailboxExistence.UNKNOWN.value,
@@ -367,22 +389,27 @@ def classify(
             reason_code = ReasonCode.DOMAIN_NOT_FOUND.value
             explanation = f"Domain '{dns.domain}' does not exist in authoritative DNS (NXDOMAIN)."
             limitations.append("DNS propagation delays may cause recently registered domains to appear nonexistent.")
+            dns_domain_res = DNSDomainResolution.NOT_RESOLVED.value
         elif getattr(dns, "is_null_mx", False):
             reason_code = ReasonCode.NO_MAIL_ROUTING.value
             explanation = f"Domain '{dns.domain}' publishes a Null MX record (RFC 7505) explicitly declaring it does not accept email."
             limitations.append("Domains publishing Null MX records reject all inbound email by design.")
+            dns_domain_res = DNSDomainResolution.RESOLVED.value
         elif getattr(dns, "invalid_mx_hosts", None) or getattr(dns, "unresolvable_mx_hosts", None):
             reason_code = ReasonCode.NO_MAIL_ROUTING.value
             explanation = f"Domain '{dns.domain}' publishes MX records, but all routing targets are invalid or unresolvable."
             limitations.append("Mail transfer agents cannot route email to unresolvable or invalid destination hosts.")
+            dns_domain_res = DNSDomainResolution.RESOLVED.value
         elif getattr(dns, "is_nodata", False):
             reason_code = ReasonCode.NO_MAIL_ROUTING.value
             explanation = f"Domain '{dns.domain}' exists in DNS (NODATA on MX), but has no MX or fallback A/AAAA records."
             limitations.append("Domains without mail routing targets cannot receive email under RFC 5321.")
+            dns_domain_res = DNSDomainResolution.RESOLVED.value
         else:
             reason_code = ReasonCode.NO_MAIL_ROUTING.value
             explanation = f"No mail routing targets (MX or fallback A/AAAA) found for domain '{dns.domain}'."
             limitations.append("Domains without mail routing targets cannot receive email under RFC 5321.")
+            dns_domain_res = DNSDomainResolution.RESOLVED.value
 
         return ClassificationResult(
             address=syntax.original,
@@ -391,6 +418,8 @@ def classify(
             reason_code=reason_code,
             explanation=explanation,
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=dns_domain_res,
+            mail_routing=MailRouting.NOT_CONFIGURED.value,
             dns_mx_validation=DNSValidation.NOT_CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
             mailbox_existence=MailboxExistence.INVALID.value,
@@ -417,6 +446,8 @@ def classify(
             reason_code=ReasonCode.DNS_TIMEOUT.value,
             explanation=f"DNS resolution timed out for domain '{dns.domain}': {dns.reason}",
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.UNKNOWN.value,
+            mail_routing=MailRouting.UNKNOWN.value,
             dns_mx_validation=DNSValidation.UNKNOWN.value,
             smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
             mailbox_existence=MailboxExistence.UNKNOWN.value,
@@ -443,6 +474,8 @@ def classify(
             reason_code=ReasonCode.DNS_TEMPORARY_FAILURE.value,
             explanation=f"DNS resolution encountered a temporary failure: {dns.reason}",
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.UNKNOWN.value,
+            mail_routing=MailRouting.UNKNOWN.value,
             dns_mx_validation=DNSValidation.UNKNOWN.value,
             smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
             mailbox_existence=MailboxExistence.UNKNOWN.value,
@@ -507,6 +540,8 @@ def classify(
             reason_code=ReasonCode.MAILBOX_UNCONFIRMED.value,
             explanation=explanation,
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.RESOLVED.value,
+            mail_routing=MailRouting.CONFIGURED.value,
             dns_mx_validation=DNSValidation.CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
             mailbox_existence=MailboxExistence.UNCONFIRMED.value,
@@ -538,6 +573,8 @@ def classify(
             reason_code=ReasonCode.MAILBOX_ACCEPTED.value,
             explanation=f"Target mail server accepted recipient probe: {smtp.reason}",
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.RESOLVED.value,
+            mail_routing=MailRouting.CONFIGURED.value,
             dns_mx_validation=DNSValidation.CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.SUCCESS.value,
             mailbox_existence=MailboxExistence.CONFIRMED.value,
@@ -565,6 +602,8 @@ def classify(
             reason_code=ReasonCode.MAILBOX_REJECTED.value,
             explanation=f"Target mail server explicitly rejected recipient during SMTP probe: {smtp.reason}",
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.RESOLVED.value,
+            mail_routing=MailRouting.CONFIGURED.value,
             dns_mx_validation=DNSValidation.CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.REJECTED.value,
             mailbox_existence=MailboxExistence.REJECTED.value,
@@ -601,14 +640,12 @@ def classify(
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.SMTP_UNAVAILABLE.value,
             explanation=(
-                smtp.reason
-                if smtp.reason.startswith("SMTP verification is unavailable")
-                else (
-                    "SMTP verification is unavailable from the current hosting environment. "
-                    f"Syntax and DNS/MX checks were completed ({smtp.reason})."
-                )
+                "SMTP verification could not be completed because the current hosting environment cannot establish the required outbound connection. "
+                "This does not mean the email address is invalid. DNS/MX results are available, but mailbox existence remains unconfirmed."
             ),
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.RESOLVED.value,
+            mail_routing=MailRouting.CONFIGURED.value,
             dns_mx_validation=DNSValidation.CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.UNAVAILABLE.value,
             mailbox_existence=MailboxExistence.UNCONFIRMED.value,
@@ -634,6 +671,8 @@ def classify(
             reason_code=ReasonCode.SMTP_TIMEOUT.value,
             explanation=f"SMTP connection or response timed out: {smtp.reason}",
             syntax_validation=SyntaxValidation.VALID.value,
+            dns_domain_resolution=DNSDomainResolution.RESOLVED.value,
+            mail_routing=MailRouting.CONFIGURED.value,
             dns_mx_validation=DNSValidation.CONFIGURED.value,
             smtp_probe=SMTPProbeStatus.TIMEOUT.value,
             mailbox_existence=MailboxExistence.UNCONFIRMED.value,
@@ -658,6 +697,8 @@ def classify(
         reason_code=ReasonCode.AMBIGUOUS_EVIDENCE.value,
         explanation=f"SMTP probe response was ambiguous or inconclusive: {smtp.reason}",
         syntax_validation=SyntaxValidation.VALID.value,
+        dns_domain_resolution=DNSDomainResolution.RESOLVED.value,
+        mail_routing=MailRouting.CONFIGURED.value,
         dns_mx_validation=DNSValidation.CONFIGURED.value,
         smtp_probe=SMTPProbeStatus.TIMEOUT.value if getattr(smtp, "is_timeout", False) else (
             SMTPProbeStatus.UNAVAILABLE.value if getattr(smtp, "is_blocked", False) else SMTPProbeStatus.NOT_TESTED.value

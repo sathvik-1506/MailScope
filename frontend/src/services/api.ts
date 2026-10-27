@@ -15,6 +15,8 @@ import type {
   ExtractionResponse,
   HistoryListResponse,
   SyntaxValidationStatus,
+  DNSDomainResolutionStatus,
+  MailRoutingStatus,
   DNSValidationStatus,
   SMTPProbeStatusType,
   MailboxExistenceStatus,
@@ -201,13 +203,25 @@ export function mapBackendToDetailedResult(
       backendResult.syntax_validation ||
       (syntaxStatus === "passed" ? "VALID" : "INVALID");
 
+    const dnsDomainResolution: DNSDomainResolutionStatus =
+      backendResult.dns_domain_resolution ||
+      (dnsStatus === "passed"
+        ? "RESOLVED"
+        : dnsStatus === "failed"
+        ? "NOT_RESOLVED"
+        : "UNKNOWN");
+
+    const mailRouting: MailRoutingStatus =
+      backendResult.mail_routing ||
+      (routingStatus === "passed"
+        ? "CONFIGURED"
+        : routingStatus === "failed"
+        ? "NOT_CONFIGURED"
+        : "UNKNOWN");
+
     const dnsMxValidation: DNSValidationStatus =
       backendResult.dns_mx_validation ||
-      (dnsStatus === "passed" || routingStatus === "passed"
-        ? "CONFIGURED"
-        : dnsStatus === "inconclusive"
-        ? "UNKNOWN"
-        : "NOT_CONFIGURED");
+      (mailRouting as unknown as DNSValidationStatus);
 
     const smtpProbe: SMTPProbeStatusType =
       backendResult.smtp_probe ||
@@ -307,6 +321,8 @@ export function mapBackendToDetailedResult(
     reason: explanation || safeEvidence[0] || "Analysis complete.",
     reasonCode: reason_code,
     syntaxValidation,
+    dnsDomainResolution,
+    mailRouting,
     dnsMxValidation,
     smtpProbe,
     mailboxExistence,

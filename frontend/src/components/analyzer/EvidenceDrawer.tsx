@@ -152,22 +152,53 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
                 </p>
               </div>
 
-              {/* 2. DNS/MX Configuration */}
+              {/* 2. DNS Domain Resolution */}
               <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="text-xs font-semibold text-text-primary">DNS / MX</span>
+                  <span className="text-xs font-semibold text-text-primary">DNS / Domain</span>
                   <CheckStatusPill
                     status={
-                      result.dnsMxValidation === "CONFIGURED" || result.dnsStatus === "passed"
+                      result.dnsDomainResolution === "RESOLVED" || (result.dnsStatus === "passed" && result.dnsDomainResolution !== "NOT_RESOLVED")
                         ? "passed"
-                        : result.dnsMxValidation === "NOT_CONFIGURED" || result.dnsStatus === "failed"
+                        : result.dnsDomainResolution === "NOT_RESOLVED" || (result.dnsStatus === "failed" && result.reasonCode === "DOMAIN_NOT_FOUND")
                         ? "failed"
                         : "inconclusive"
                     }
                     label={
-                      result.dnsMxValidation === "CONFIGURED" || result.dnsStatus === "passed"
+                      result.dnsDomainResolution === "RESOLVED" || (result.dnsStatus === "passed" && result.dnsDomainResolution !== "NOT_RESOLVED")
+                        ? "Resolved"
+                        : result.dnsDomainResolution === "NOT_RESOLVED" || (result.dnsStatus === "failed" && result.reasonCode === "DOMAIN_NOT_FOUND")
+                        ? "Not Resolved"
+                        : "Unknown"
+                    }
+                    compact
+                  />
+                </div>
+                <p className="text-[11px] text-text-secondary leading-snug">
+                  {result.dnsDomainResolution === "RESOLVED" || (result.dnsStatus === "passed" && result.dnsDomainResolution !== "NOT_RESOLVED")
+                    ? "Domain resolves in authoritative DNS with active nameservers."
+                    : result.dnsDomainResolution === "NOT_RESOLVED" || (result.dnsStatus === "failed" && result.reasonCode === "DOMAIN_NOT_FOUND")
+                    ? "Domain does not exist in authoritative DNS (NXDOMAIN)."
+                    : "DNS query timed out or resolver returned a temporary failure (SERVFAIL)."}
+                </p>
+              </div>
+
+              {/* 3. Mail Routing Configuration */}
+              <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-semibold text-text-primary">Mail Routing</span>
+                  <CheckStatusPill
+                    status={
+                      result.mailRouting === "CONFIGURED" || result.dnsMxValidation === "CONFIGURED" || result.routingStatus === "passed"
+                        ? "passed"
+                        : result.mailRouting === "NOT_CONFIGURED" || result.dnsMxValidation === "NOT_CONFIGURED" || result.routingStatus === "failed"
+                        ? "failed"
+                        : "inconclusive"
+                    }
+                    label={
+                      result.mailRouting === "CONFIGURED" || result.dnsMxValidation === "CONFIGURED" || result.routingStatus === "passed"
                         ? "Configured"
-                        : result.dnsMxValidation === "NOT_CONFIGURED" || result.dnsStatus === "failed"
+                        : result.mailRouting === "NOT_CONFIGURED" || result.dnsMxValidation === "NOT_CONFIGURED" || result.routingStatus === "failed"
                         ? "Not Configured"
                         : "Unknown"
                     }
@@ -175,40 +206,40 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
                   />
                 </div>
                 <p className="text-[11px] text-text-secondary leading-snug">
-                  {result.dnsMxValidation === "CONFIGURED" || result.dnsStatus === "passed"
-                    ? "Domain has usable mail-routing configuration (active MX or fallback A/AAAA)."
-                    : result.dnsMxValidation === "NOT_CONFIGURED" || result.dnsStatus === "failed"
+                  {result.mailRouting === "CONFIGURED" || result.dnsMxValidation === "CONFIGURED" || result.routingStatus === "passed"
+                    ? "Domain publishes valid mail routing destinations (active MX or fallback A/AAAA records)."
+                    : result.mailRouting === "NOT_CONFIGURED" || result.dnsMxValidation === "NOT_CONFIGURED" || result.routingStatus === "failed"
                     ? "Domain publishes no mail routing (or publishes Null MX per RFC 7505)."
-                    : "DNS outcome could not be determined due to resolver timeout or SERVFAIL."}
+                    : "Mail routing destinations could not be determined due to DNS resolver failure or timeout."}
                 </p>
               </div>
 
-              {/* 3. SMTP Probe */}
+              {/* 4. SMTP Probe */}
               <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span className="text-xs font-semibold text-text-primary">SMTP Probe</span>
                   <CheckStatusPill
                     status={
-                      result.smtpProbe === "SUCCESS" || result.smtpStatus === "passed"
+                      result.smtpProbe === "SUCCESS" || result.smtpProbe === "AVAILABLE" || result.smtpStatus === "passed"
                         ? "passed"
                         : result.smtpProbe === "REJECTED" || result.smtpStatus === "failed"
                         ? "failed"
                         : result.smtpProbe === "UNAVAILABLE" || result.smtpStatus === "unavailable"
                         ? "unavailable"
-                        : result.smtpProbe === "TIMEOUT" || result.smtpStatus === "inconclusive"
+                        : result.smtpProbe === "TIMEOUT" || result.smtpProbe === "INCONCLUSIVE" || result.smtpStatus === "inconclusive"
                         ? "inconclusive"
                         : "skipped"
                     }
                     label={
-                      result.smtpProbe === "SUCCESS" || result.smtpStatus === "passed"
-                        ? "Success"
+                      result.smtpProbe === "SUCCESS" || result.smtpProbe === "AVAILABLE" || result.smtpStatus === "passed"
+                        ? "Available"
                         : result.smtpProbe === "REJECTED" || result.smtpStatus === "failed"
                         ? "Rejected"
                         : result.smtpProbe === "UNAVAILABLE" || result.smtpStatus === "unavailable"
                         ? "Unavailable"
-                        : result.smtpProbe === "TIMEOUT" || result.smtpStatus === "inconclusive"
-                        ? "Timeout"
-                        : "Not Tested"
+                        : result.smtpProbe === "TIMEOUT" || result.smtpProbe === "INCONCLUSIVE" || result.smtpStatus === "inconclusive"
+                        ? "Inconclusive"
+                        : "Not Attempted"
                     }
                     compact
                     title={
@@ -222,7 +253,7 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
                   {result.smtpProbe === "UNAVAILABLE" || result.smtpStatus === "unavailable"
                     ? "Unavailable from current hosting environment: Outbound port 25 connection blocked or network unreachable."
                     : result.smtpProbe === "NOT_TESTED" || result.smtpStatus === "skipped"
-                    ? "SMTP probing was disabled or omitted for this request."
+                    ? "SMTP probing was unattempted or disabled for this analysis."
                     : result.smtpProbe === "TIMEOUT"
                     ? "Connection or response timed out during SMTP handshake."
                     : result.smtpProbe === "REJECTED"
@@ -231,8 +262,8 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
                 </p>
               </div>
 
-              {/* 4. Mailbox Existence */}
-              <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
+              {/* 5. Mailbox Existence */}
+              <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3 sm:col-span-2">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span className="text-xs font-semibold text-text-primary">Mailbox Existence</span>
                   <CheckStatusPill
@@ -268,7 +299,7 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
                   {result.mailboxExistence === "CONFIRMED"
                     ? "Recipient acknowledged by destination server (subject to catch-all caveat)."
                     : result.mailboxExistence === "UNCONFIRMED"
-                    ? "Unconfirmed: Domain routing is valid, but mailbox existence cannot be proven without direct SMTP probe."
+                    ? "Unconfirmed: Mail routing is valid, but mailbox existence cannot be confirmed without direct SMTP probe."
                     : result.mailboxExistence === "REJECTED"
                     ? "Explicit recipient rejection observed from destination server."
                     : result.mailboxExistence === "INVALID"

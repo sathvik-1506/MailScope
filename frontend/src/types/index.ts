@@ -83,9 +83,13 @@ export interface SMTPEvidence {
 
 export type SyntaxValidationStatus = "VALID" | "INVALID";
 
+export type DNSDomainResolutionStatus = "RESOLVED" | "NOT_RESOLVED" | "UNKNOWN";
+
+export type MailRoutingStatus = "CONFIGURED" | "NOT_CONFIGURED" | "UNKNOWN";
+
 export type DNSValidationStatus = "CONFIGURED" | "NOT_CONFIGURED" | "UNKNOWN";
 
-export type SMTPProbeStatusType = "SUCCESS" | "UNAVAILABLE" | "TIMEOUT" | "REJECTED" | "NOT_TESTED";
+export type SMTPProbeStatusType = "SUCCESS" | "UNAVAILABLE" | "TIMEOUT" | "REJECTED" | "NOT_TESTED" | "AVAILABLE" | "INCONCLUSIVE";
 
 export type MailboxExistenceStatus = "CONFIRMED" | "REJECTED" | "UNCONFIRMED" | "INVALID" | "UNKNOWN";
 
@@ -97,6 +101,8 @@ export interface BackendAddressResult {
   reason_code: string;
   explanation: string;
   syntax_validation?: SyntaxValidationStatus;
+  dns_domain_resolution?: DNSDomainResolutionStatus;
+  mail_routing?: MailRoutingStatus;
   dns_mx_validation?: DNSValidationStatus;
   smtp_probe?: SMTPProbeStatusType;
   mailbox_existence?: MailboxExistenceStatus;
@@ -133,6 +139,8 @@ export interface DetailedAddressResult {
   reason: string;
   reasonCode?: string;
   syntaxValidation?: SyntaxValidationStatus;
+  dnsDomainResolution?: DNSDomainResolutionStatus;
+  mailRouting?: MailRoutingStatus;
   dnsMxValidation?: DNSValidationStatus;
   smtpProbe?: SMTPProbeStatusType;
   mailboxExistence?: MailboxExistenceStatus;

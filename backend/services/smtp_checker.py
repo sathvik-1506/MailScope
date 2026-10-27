@@ -22,6 +22,7 @@ IMPORTANT – design constraints
 from __future__ import annotations
 
 import ipaddress
+import os
 import smtplib
 import socket
 import ssl
@@ -34,6 +35,38 @@ _ENV_UNAVAILABLE_UNTIL: float = 0.0
 _ENV_UNAVAILABLE_LOCK = threading.Lock()
 _ENV_UNAVAILABLE_REASON: str = ""
 _ENV_CACHE_TTL_SECONDS: float = 120.0  # 2 minutes TTL for environment network-level restriction
+_DEFAULT_TIMEOUT_SECONDS = 3.0
+_MAX_TIMEOUT_SECONDS = 10.0
+
+
+def get_smtp_probing_mode() -> str:
+    """Returns 'auto', 'disabled', or 'enabled' based on SMTP_PROBING_ENABLED env var."""
+    val = os.environ.get("SMTP_PROBING_ENABLED", "auto").strip().lower()
+    if val in ("false", "0", "disabled", "off", "no"):
+        return "disabled"
+    if val in ("true", "1", "enabled", "on", "yes"):
+        return "enabled"
+    return "auto"
+
+
+def get_configured_smtp_timeout() -> float:
+    """Returns configured timeout in seconds, bounded between 1.0 and 10.0s."""
+    raw = os.environ.get("SMTP_TIMEOUT_SECONDS", "")
+    try:
+        val = float(raw)
+        return min(max(1.0, val), _MAX_TIMEOUT_SECONDS)
+    except (ValueError, TypeError):
+        return _DEFAULT_TIMEOUT_SECONDS
+
+
+def get_configured_cache_ttl() -> float:
+    """Returns configured cache TTL in seconds for network unreachability."""
+    raw = os.environ.get("SMTP_CACHE_TTL_SECONDS", "")
+    try:
+        val = float(raw)
+        return min(max(10.0, val), 3600.0)
+    except (ValueError, TypeError):
+        return _ENV_CACHE_TTL_SECONDS
 
 
 def get_environment_smtp_unavailability() -> tuple[bool, str]:
@@ -46,11 +79,12 @@ def get_environment_smtp_unavailability() -> tuple[bool, str]:
         return False, ""
 
 
-def record_environment_smtp_unavailability(reason: str, ttl: float = _ENV_CACHE_TTL_SECONDS) -> None:
+def record_environment_smtp_unavailability(reason: str, ttl: float | None = None) -> None:
     """Record that the current hosting environment has blocked outbound port 25."""
     global _ENV_UNAVAILABLE_UNTIL, _ENV_UNAVAILABLE_REASON
+    effective_ttl = ttl if ttl is not None else get_configured_cache_ttl()
     with _ENV_UNAVAILABLE_LOCK:
-        _ENV_UNAVAILABLE_UNTIL = time.monotonic() + ttl
+        _ENV_UNAVAILABLE_UNTIL = time.monotonic() + effective_ttl
         _ENV_UNAVAILABLE_REASON = reason
 
 
@@ -84,8 +118,6 @@ class SMTPResult:
 
 _HELO_DOMAIN = "mailora.local"
 _SENDER = "verify@mailora.local"
-_DEFAULT_TIMEOUT_SECONDS = 5.0
-_MAX_TIMEOUT_SECONDS = 10.0
 
 
 def is_prohibited_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -249,6 +281,15 @@ def check_smtp(
     Returns:
         A :class:`SMTPResult` describing the observed recipient response.
     """
+    if get_smtp_probing_mode() == "disabled":
+        return SMTPResult(
+            status=SMTPStatus.DISABLED,
+            address=address,
+            is_blocked=True,
+            error_code="SMTP_DISABLED",
+            reason="SMTP verification is disabled by server configuration for this hosting environment. Syntax and DNS/MX checks were completed.",
+        )
+
     if not enabled:
         return SMTPResult(
             status=SMTPStatus.DISABLED,
@@ -295,7 +336,10 @@ def check_smtp(
             )
         hosts_to_probe = [clean_host]
 
-    bounded_timeout = min(max(1.0, float(timeout)), _MAX_TIMEOUT_SECONDS)
+    effective_timeout = timeout
+    if timeout in (3.0, 5.0):
+        effective_timeout = get_configured_smtp_timeout()
+    bounded_timeout = min(max(1.0, float(effective_timeout)), _MAX_TIMEOUT_SECONDS)
 
     last_error_reason = ""
     last_error_code = ""

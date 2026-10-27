@@ -243,8 +243,10 @@ describe("Frontend API Client Mapping", () => {
 
     const detailed = mapBackendToDetailedResult(renderBlockedResult, 0);
 
-    // Verify 4 independent check dimensions
+    // Verify 5 independent check dimensions
     assert.equal(detailed.syntaxValidation, "VALID");
+    assert.equal(detailed.dnsDomainResolution, "RESOLVED");
+    assert.equal(detailed.mailRouting, "CONFIGURED");
     assert.equal(detailed.dnsMxValidation, "CONFIGURED");
     assert.equal(detailed.smtpProbe, "UNAVAILABLE");
     assert.equal(detailed.mailboxExistence, "UNCONFIRMED");
@@ -262,8 +264,10 @@ describe("Frontend API Client Mapping", () => {
       address: "hello@domain.com",
       verdict: "unknown",
       reason_code: "SMTP_UNAVAILABLE",
-      explanation: "SMTP verification is unavailable from the current hosting environment. Syntax and DNS/MX checks were completed (port 25 blocked).",
+      explanation: "SMTP verification could not be completed because the current hosting environment cannot establish the required outbound connection. This does not mean the email address is invalid. DNS/MX results are available, but mailbox existence remains unconfirmed.",
       syntax_validation: "VALID",
+      dns_domain_resolution: "RESOLVED",
+      mail_routing: "CONFIGURED",
       dns_mx_validation: "CONFIGURED",
       smtp_probe: "UNAVAILABLE",
       mailbox_existence: "UNCONFIRMED",
@@ -278,9 +282,11 @@ describe("Frontend API Client Mapping", () => {
     const detailed = mapBackendToDetailedResult(autoResult, 0);
     assert.equal(detailed.verdict, "unknown");
     assert.equal(detailed.syntaxValidation, "VALID");
+    assert.equal(detailed.dnsDomainResolution, "RESOLVED");
+    assert.equal(detailed.mailRouting, "CONFIGURED");
     assert.equal(detailed.dnsMxValidation, "CONFIGURED");
     assert.equal(detailed.smtpProbe, "UNAVAILABLE");
     assert.equal(detailed.mailboxExistence, "UNCONFIRMED");
-    assert.match(detailed.reason, /SMTP verification is unavailable from the current hosting environment/);
+    assert.match(detailed.reason, /SMTP verification could not be completed because the current hosting environment cannot establish the required outbound connection/);
   });
 });

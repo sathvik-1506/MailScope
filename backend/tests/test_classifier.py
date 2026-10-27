@@ -440,7 +440,7 @@ class TestConsistencyAcrossEvidenceStates:
         smtp = SMTPResult(status=SMTPStatus.INCONCLUSIVE, address="user@example.com", is_blocked=True, reason="Port 25 blocked")
         result = classify(_valid_syntax(), dns=_mx_dns(), smtp=smtp)
         explanation_lower = result.explanation.lower()
-        assert "blocked" in explanation_lower or "refused" in explanation_lower
+        assert "outbound connection" in explanation_lower or "unavailable" in explanation_lower or "blocked" in explanation_lower
         assert "rejected" not in explanation_lower
 
     def test_invalid_syntax_skips_dns_and_smtp(self) -> None:
