@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { HelpCircle, RotateCcw } from "lucide-react";
+import { HelpCircle, RotateCcw, FileText, UploadCloud } from "lucide-react";
 import {
   AddressInputSection,
+  FileUploadSection,
   SummaryCards,
   ResultsFilterBar,
   ResultsTable,
@@ -29,6 +30,7 @@ export default function AnalyzerPage() {
 
   // Input state
   const [input, setInput] = useState<string>("");
+  const [inputMode, setInputMode] = useState<"manual" | "upload">("manual");
 
   // Execution state
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -188,15 +190,60 @@ export default function AnalyzerPage() {
         </div>
       </div>
 
-      {/* 2. Address Batch Input Section */}
-      <AddressInputSection
-        input={input}
-        onChangeInput={setInput}
-        onAnalyze={handleAnalyze}
-        isLoading={isLoading}
-        progressPercent={progressPercent}
-        progressStep={progressStep}
-      />
+      {/* 2. Mode Selector: Manual Paste vs. Document File Upload */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-border-subtle">
+          <button
+            type="button"
+            onClick={() => setInputMode("manual")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-all border-b-2 cursor-pointer ${
+              inputMode === "manual"
+                ? "border-brand-500 text-brand-500 bg-surface-secondary dark:bg-surface-elevated/40"
+                : "border-transparent text-text-muted hover:text-text-primary hover:bg-surface-elevated/20"
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>Manual Text Input</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setInputMode("upload")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-all border-b-2 cursor-pointer ${
+              inputMode === "upload"
+                ? "border-brand-500 text-brand-500 bg-surface-secondary dark:bg-surface-elevated/40"
+                : "border-transparent text-text-muted hover:text-text-primary hover:bg-surface-elevated/20"
+            }`}
+          >
+            <UploadCloud className="h-3.5 w-3.5" />
+            <span>Upload Documents (.txt, .csv, .pdf, .docx, .eml)</span>
+          </button>
+        </div>
+
+        {inputMode === "manual" ? (
+          <AddressInputSection
+            input={input}
+            onChangeInput={setInput}
+            onAnalyze={handleAnalyze}
+            isLoading={isLoading}
+            progressPercent={progressPercent}
+            progressStep={progressStep}
+          />
+        ) : (
+          <FileUploadSection
+            onAnalyzeAddresses={handleAnalyze}
+            onAppendToManualInput={(newAddrs) => {
+              setInput((prev) => {
+                const existing = prev.trim();
+                const joined = newAddrs.join("\n");
+                return existing ? `${existing}\n${joined}` : joined;
+              });
+              setInputMode("manual");
+            }}
+            isLoadingAnalysis={isLoading}
+          />
+        )}
+      </div>
 
       {/* 3. Summary Cards for the three verdicts */}
       {results.length > 0 && (

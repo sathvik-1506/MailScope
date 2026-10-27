@@ -12,6 +12,7 @@ import type {
   CheckStatus,
   CheckItem,
   Verdict,
+  ExtractionResponse,
 } from "../types";
 
 // Read API base URL per Requirement 2
@@ -375,3 +376,88 @@ export async function analyzeAddresses(
     mapBackendToDetailedResult(r, i)
   );
 }
+
+/**
+ * Uploads one or more supported documents (.txt, .csv, .pdf, .docx, .eml) to the
+ * Mailora backend extraction endpoint to parse and detect candidate email addresses.
+ *
+ * @param files - List of File objects from browser file input or drag-and-drop
+ * @param timeoutMs - Request timeout in milliseconds (default 45,000ms)
+ * @returns Structured extraction summary including candidates, counts, and per-file reports
+ */
+export async function extractEmailsFromFiles(
+  files: File[],
+  timeoutMs = 45000
+): Promise<ExtractionResponse> {
+  if (!files || files.length === 0) {
+    throw new APIClientError("No files selected for extraction.", 400, "NO_FILES_PROVIDED");
+  }
+
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file, file.name);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/extract`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+  } catch (err: unknown) {
+    clearTimeout(timer);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new APIClientError(
+        `Extraction request timed out after ${timeoutMs / 1000} seconds. Please verify file sizes and connectivity.`,
+        408,
+        "TIMEOUT",
+        true
+      );
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new APIClientError(
+      `Could not establish connection to ${BRAND.name} backend service at ${API_BASE_URL}. Please ensure the backend is running. (${msg})`,
+      undefined,
+      "CONNECTION_REFUSED",
+      true
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let data: any;
+  const rawText = await response.text();
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    throw new APIClientError(
+      `Backend returned an invalid non-JSON response (HTTP ${response.status}).`,
+      response.status,
+      "INVALID_JSON"
+    );
+  }
+
+  if (!response.ok) {
+    const errorMsg = data?.error || `Document extraction failed (HTTP ${response.status})`;
+    const code = data?.code || "EXTRACTION_ERROR";
+    throw new APIClientError(errorMsg, response.status, code);
+  }
+
+  if (!data || !Array.isArray(data.candidates) || !Array.isArray(data.files)) {
+    throw new APIClientError(
+      "Backend response schema violated: expected 'candidates' and 'files' arrays.",
+      response.status,
+      "SCHEMA_ERROR"
+    );
+  }
+
+  return data as ExtractionResponse;
+}
+

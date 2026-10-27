@@ -31,9 +31,16 @@ Traditional email validation tools operate as black boxes, often returning binar
   * **Likely Bounce**: Definitively invalid syntax, non-existent domain (`NXDOMAIN`), explicit null MX, or 5xx rejection code.
   * **Unknown**: Mailbox existence cannot be verified conclusively (e.g. SMTP disabled, blocked port 25, timeouts, or greylisting).
 * **Evidence Ledger & Audit Trail**: Every analyzed address includes an expandable drawer breaking down each pipeline check, observed latency, technical evidence items, and known operational caveats.
+* **Secure Document Email Extraction Workflow**:
+  * **Supported Formats**: `.txt` (plain text), `.csv` (spreadsheets), `.pdf` (extractable text via `pypdf`), `.docx` (Word documents via `python-docx`), and `.eml` (standard RFC 822 messages).
+  * **Explicit Format Protections**: Disallows legacy binary Word files (`.doc`) with guidance to convert to `.docx` or `.txt`; outright rejects executable binaries (`.exe`, `.dll`, `.bat`), scripts, and general archives (`.zip`).
+  * **Scanned PDF Guidance**: Clearly clarifies that non-searchable, scanned-image PDFs require conversion to searchable text first (OCR is intentionally not supported to avoid introducing uncalibrated external dependencies).
+  * **Security & Defense-in-Depth**: Strict 5 MB per file and 5 files per upload limits; streaming in-memory parsing with zero disk persistence; path traversal sanitization; zip bomb and decompression protection; privacy-safe logging that avoids recording raw email addresses.
+  * **Candidate Review & Batch Fusion**: Reviewable candidate list with source references (file + row/col/page), duplicate removal counters, warning alerts, quick manual address addition, and direct dispatch to the deliverability verification engine.
 * **Modern SaaS Web Workspace**:
-  * Professional deep navy aesthetic (`#0A0F1D` background, violet/indigo accents).
+  * Professional responsive interface with Light, Dark, and System appearance modes.
   * Fast bulk address textarea with line/comma/semicolon normalization and counter.
+  * Drag-and-drop document upload with real-time format and size validation.
   * Live RFC 2606 test fixtures (`@example.com`, `@example.org`) for zero-risk demonstration.
   * Instant filter tabs, text search, and sorting.
   * RFC 4180 compliant CSV export hardened against Spreadsheet Formula Injection (CWE-1236).

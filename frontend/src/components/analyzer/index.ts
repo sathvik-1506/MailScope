@@ -9,3 +9,5 @@ export { default as EmptyState } from "./EmptyState";
 export { default as ErrorState } from "./ErrorState";
 export { default as NoResultsState } from "./NoResultsState";
 export { default as MethodologyModal } from "./MethodologyModal";
+export { default as FileUploadSection } from "./FileUploadSection";
+

@@ -186,3 +186,39 @@ export const CHECK_STATUS_META: Record<CheckStatus, CheckStatusMeta> = {
     borderClass: "border-zinc-600/30 dark:border-zinc-500/30",
   },
 };
+
+// ---------------------------------------------------------------------------
+// Document Email Extraction Shapes
+// ---------------------------------------------------------------------------
+
+export interface ExtractedSourceReference {
+  file: string;
+  location: string;
+}
+
+export interface ExtractedCandidate {
+  address: string;
+  normalized: string;
+  source_file: string;
+  location: string;
+  all_sources: ExtractedSourceReference[];
+  occurrences: number;
+}
+
+export interface ExtractionFileReport {
+  filename: string;
+  size_bytes: number;
+  status: "success" | "warning" | "error";
+  candidates_found: number;
+  warnings: string[];
+}
+
+export interface ExtractionResponse {
+  candidates: ExtractedCandidate[];
+  unique_count: number;
+  total_detected: number;
+  duplicates_removed: number;
+  files: ExtractionFileReport[];
+  warnings: string[];
+}
+

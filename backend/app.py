@@ -24,16 +24,20 @@ from .services.schemas import (
     mask_email_for_logging,
 )
 from .services.rate_limiter import get_rate_limiter, extract_client_ip
+from .services.extractor import (
+    ExtractionError,
+    process_uploaded_files,
+)
 
 logger = logging.getLogger("mailora")
 
 
 def get_max_content_length() -> int:
-    """Returns the maximum permitted request body size in bytes."""
+    """Returns the maximum permitted request body size in bytes (10MB default for document uploads)."""
     try:
-        return int(os.environ.get("MAX_CONTENT_LENGTH", 1 * 1024 * 1024))
+        return int(os.environ.get("MAX_CONTENT_LENGTH", 10 * 1024 * 1024))
     except (ValueError, TypeError):
-        return 1 * 1024 * 1024
+        return 10 * 1024 * 1024
 
 
 def get_max_workers() -> int:
@@ -106,6 +110,10 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     @app.errorhandler(APIValidationError)
     def handle_validation_error(exc: APIValidationError):
+        return jsonify({"error": exc.message, "code": exc.code}), exc.status_code
+
+    @app.errorhandler(ExtractionError)
+    def handle_extraction_error(exc: ExtractionError):
         return jsonify({"error": exc.message, "code": exc.code}), exc.status_code
 
     @app.errorhandler(400)
@@ -261,6 +269,61 @@ def create_app() -> Flask:
     @app.post("/api/v1/analyze")
     def analyze_v1_api():
         return _handle_analyze()
+
+    # ------------------------------------------------------------------
+    # Document Text & Candidate Email Extraction Endpoint
+    # ------------------------------------------------------------------
+    def _handle_extract():
+        # 1. Rate Limiting Check
+        client_ip = extract_client_ip(request)
+        is_limited, retry_after, _ = get_rate_limiter().check(client_ip)
+        if is_limited:
+            resp = jsonify({
+                "error": "Rate limit exceeded. Please wait before submitting additional extraction requests.",
+                "code": "RATE_LIMIT_EXCEEDED",
+                "retry_after": retry_after,
+            })
+            resp.status_code = 429
+            resp.headers["Retry-After"] = str(retry_after)
+            return resp
+
+        # 2. Collect uploaded files
+        uploaded_files = []
+        if "files" in request.files:
+            uploaded_files = request.files.getlist("files")
+        elif "file" in request.files:
+            uploaded_files = [request.files["file"]]
+        else:
+            for key in request.files:
+                uploaded_files.extend(request.files.getlist(key))
+
+        # Filter out empty file records
+        valid_files = [(f.stream, f.filename) for f in uploaded_files if f and f.filename]
+        if not valid_files:
+            return jsonify({
+                "error": "No files provided for extraction. Upload at least one supported document.",
+                "code": "NO_FILES_PROVIDED",
+            }), 400
+
+        try:
+            extraction_result = process_uploaded_files(valid_files)
+            return jsonify(extraction_result), 200
+        except ExtractionError as exc:
+            return jsonify({"error": exc.message, "code": exc.code}), exc.status_code
+        except Exception as exc:
+            logger.error(f"Unexpected document extraction failure: {exc}")
+            return jsonify({
+                "error": "An unexpected error occurred while parsing the document.",
+                "code": "EXTRACTION_FAILED",
+            }), 500
+
+    @app.post("/api/extract")
+    def extract_api():
+        return _handle_extract()
+
+    @app.post("/api/v1/extract")
+    def extract_v1_api():
+        return _handle_extract()
 
     return app
 
