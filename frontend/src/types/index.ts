@@ -222,3 +222,34 @@ export interface ExtractionResponse {
   warnings: string[];
 }
 
+// ---------------------------------------------------------------------------
+// Analysis History Record Shapes
+// ---------------------------------------------------------------------------
+
+export interface DomainFrequency {
+  domain: string;
+  count: number;
+}
+
+export interface HistoryRunSummary {
+  id: string;
+  created_at: string;
+  status: "completed" | "failed" | string;
+  addresses_count: number;
+  delivered_count: number;
+  bounce_count: number;
+  unknown_count: number;
+  smtp_enabled: boolean;
+  domains_summary: DomainFrequency[];
+  has_detailed_results: boolean;
+}
+
+export interface HistoryListResponse {
+  items: HistoryRunSummary[];
+  total: number;
+  page: number;
+  limit: number;
+  retention_days: number;
+}
+
+

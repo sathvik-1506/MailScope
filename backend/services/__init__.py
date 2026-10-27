@@ -13,6 +13,11 @@ from .schemas import (
     mask_email_for_logging,
     DEFAULT_MAX_BATCH_SIZE,
 )
+from .history_service import (
+    HistoryService,
+    get_history_service,
+    HistoryDatabaseError,
+)
 
 __all__ = [
     "check_syntax",
@@ -32,4 +37,8 @@ __all__ = [
     "APIValidationError",
     "mask_email_for_logging",
     "DEFAULT_MAX_BATCH_SIZE",
+    "HistoryService",
+    "get_history_service",
+    "HistoryDatabaseError",
 ]
+

@@ -19,7 +19,15 @@ env/
 .env
 *.env.local
 
+# ---- SQLite / Databases ----
+*.db
+*.sqlite3
+*.db-journal
+*.db-wal
+backend/data/
+
 # ---- pytest / coverage ----
+
 .pytest_cache/
 .coverage
 htmlcov/

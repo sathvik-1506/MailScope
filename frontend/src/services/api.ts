@@ -13,7 +13,10 @@ import type {
   CheckItem,
   Verdict,
   ExtractionResponse,
+  HistoryListResponse,
 } from "../types";
+
+
 
 // Read API base URL per Requirement 2
 export const API_BASE_URL: string =
@@ -372,9 +375,18 @@ export async function analyzeAddresses(
   }
 
   // Map each backend result into a DetailedAddressResult
-  return (data.results as BackendAddressResult[]).map((r, i) =>
+  const mapped = (data.results as BackendAddressResult[]).map((r, i) =>
     mapBackendToDetailedResult(r, i)
   );
+  if (data.batch_id && typeof data.batch_id === "string") {
+    Object.defineProperty(mapped, "batchId", {
+      value: data.batch_id,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return mapped;
+
 }
 
 /**
@@ -460,4 +472,113 @@ export async function extractEmailsFromFiles(
 
   return data as ExtractionResponse;
 }
+
+// ---------------------------------------------------------------------------
+// Analysis History API Operations
+// ---------------------------------------------------------------------------
+
+export interface HistoryQueryOptions {
+  q?: string;
+  start_date?: string;
+  end_date?: string;
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * Queries analysis runs from the backend history ledger with optional filters.
+ */
+export async function fetchHistoryRuns(
+  options: HistoryQueryOptions = {},
+  timeoutMs = 10000
+): Promise<HistoryListResponse> {
+  const params = new URLSearchParams();
+  if (options.q) params.set("q", options.q);
+  if (options.start_date) params.set("start_date", options.start_date);
+  if (options.end_date) params.set("end_date", options.end_date);
+  if (options.page) params.set("page", String(options.page));
+  if (options.limit) params.set("limit", String(options.limit));
+
+  const qs = params.toString();
+  const url = `${API_BASE_URL}/api/history${qs ? `?${qs}` : ""}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new APIClientError(`Failed to fetch history (HTTP ${response.status})`, response.status);
+    }
+
+    const data = await response.json();
+    return data as HistoryListResponse;
+  } catch (err: unknown) {
+    if (err instanceof APIClientError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new APIClientError(`History fetch failed: ${msg}`, undefined, "NETWORK_ERROR", true);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Deletes a single history run by ID.
+ */
+export async function deleteHistoryRun(runId: string, timeoutMs = 8000): Promise<boolean> {
+  if (!runId) return false;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/history/${encodeURIComponent(runId)}`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+
+    return response.ok;
+  } catch (err: unknown) {
+    loggerError(`Failed to delete history run ${runId}:`, err);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Clears all history runs from the backend ledger.
+ */
+export async function clearAllHistoryRuns(timeoutMs = 8000): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/history`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+
+    return response.ok;
+  } catch (err: unknown) {
+    loggerError("Failed to clear history runs:", err);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function loggerError(msg: string, err: unknown) {
+  if (typeof console !== "undefined" && console.warn) {
+    console.warn(msg, err);
+  }
+}
+
 

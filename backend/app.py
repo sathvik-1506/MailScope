@@ -28,8 +28,13 @@ from .services.extractor import (
     ExtractionError,
     process_uploaded_files,
 )
+from .services.history_service import (
+    get_history_service,
+    HistoryDatabaseError,
+)
 
 logger = logging.getLogger("mailora")
+
 
 
 def get_max_content_length() -> int:
@@ -115,6 +120,12 @@ def create_app() -> Flask:
     @app.errorhandler(ExtractionError)
     def handle_extraction_error(exc: ExtractionError):
         return jsonify({"error": exc.message, "code": exc.code}), exc.status_code
+
+    @app.errorhandler(HistoryDatabaseError)
+    def handle_history_error(exc: HistoryDatabaseError):
+        logger.error(f"History database operation failed: {exc}")
+        return jsonify({"error": "History storage operation failed. Service remains available.", "code": "HISTORY_STORAGE_ERROR"}), 500
+
 
     @app.errorhandler(400)
     def handle_bad_request(exc: Any):
@@ -255,11 +266,47 @@ def create_app() -> Flask:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(_process_address, validated.addresses))
 
+        analysed_at = datetime.now(timezone.utc).isoformat()
+        batch_id = f"batch-{int(datetime.now(timezone.utc).timestamp())}-{os.urandom(3).hex()}"
+
+        # Privacy-conscious metadata logging and aggregate recording
+        delivered_count = sum(1 for r in results if r.get("verdict") == "likely_delivered")
+        bounce_count = sum(1 for r in results if r.get("verdict") == "likely_bounce")
+        unknown_count = sum(1 for r in results if r.get("verdict") == "unknown")
+
+        domain_counts: dict[str, int] = {}
+        for r in results:
+            d = (r.get("domain") or "").lower().strip()
+            if d:
+                domain_counts[d] = domain_counts.get(d, 0) + 1
+        top_domains = [
+            {"domain": d, "count": c}
+            for d, c in sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        ]
+
+        try:
+            get_history_service().record_run(
+                run_id=batch_id,
+                created_at=analysed_at,
+                status="completed",
+                addresses_count=len(results),
+                delivered_count=delivered_count,
+                bounce_count=bounce_count,
+                unknown_count=unknown_count,
+                smtp_enabled=validated.smtp_enabled,
+                domains_summary=top_domains,
+                has_detailed_results=False,
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to record run metadata in history: {exc}")
+
         return jsonify({
+            "batch_id": batch_id,
             "results": results,
             "count": len(results),
-            "analysed_at": datetime.now(timezone.utc).isoformat(),
+            "analysed_at": analysed_at,
         }), 200
+
 
     # Register both /api/analyze and /api/v1/analyze
     @app.post("/api/analyze")
@@ -325,7 +372,125 @@ def create_app() -> Flask:
     def extract_v1_api():
         return _handle_extract()
 
+    # ------------------------------------------------------------------
+    # Analysis History Endpoints (Minimal, Privacy-Conscious Ledger)
+    # ------------------------------------------------------------------
+    def _handle_list_history():
+        query = request.args.get("q")
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
+        try:
+            page = int(request.args.get("page", 1))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            limit = int(request.args.get("limit", 10))
+        except (ValueError, TypeError):
+            limit = 10
+
+        data = get_history_service().list_runs(
+            query=query,
+            start_date=start_date,
+            end_date=end_date,
+            page=page,
+            limit=limit,
+        )
+        return jsonify(data), 200
+
+    @app.get("/api/history")
+    def get_history_api():
+        return _handle_list_history()
+
+    @app.get("/api/v1/history")
+    def get_history_v1_api():
+        return _handle_list_history()
+
+    def _handle_post_history():
+        payload = request.get_json(silent=True) or {}
+        run_id = payload.get("id")
+        if not run_id:
+            return jsonify({
+                "error": "Field 'id' is required to record run metadata",
+                "code": "MISSING_RUN_ID",
+            }), 400
+
+        try:
+            item = get_history_service().record_run(
+                run_id=run_id,
+                created_at=payload.get("created_at"),
+                status=payload.get("status", "completed"),
+                addresses_count=payload.get("addresses_count", 0),
+                delivered_count=payload.get("delivered_count", 0),
+                bounce_count=payload.get("bounce_count", 0),
+                unknown_count=payload.get("unknown_count", 0),
+                smtp_enabled=bool(payload.get("smtp_enabled", False)),
+                domains_summary=payload.get("domains_summary", []),
+                has_detailed_results=bool(payload.get("has_detailed_results", False)),
+            )
+            return jsonify({"status": "created", "item": item}), 201
+        except Exception as exc:
+            logger.error(f"Failed to record history payload: {exc}")
+            return jsonify({
+                "error": "Failed to record history entry",
+                "code": "HISTORY_RECORD_FAILED",
+            }), 500
+
+    @app.post("/api/history")
+    def post_history_api():
+        return _handle_post_history()
+
+    @app.post("/api/v1/history")
+    def post_history_v1_api():
+        return _handle_post_history()
+
+    def _handle_get_single_history(run_id: str):
+        item = get_history_service().get_run(run_id)
+        if not item:
+            return jsonify({
+                "error": f"Analysis run '{run_id}' not found or has expired",
+                "code": "RUN_NOT_FOUND",
+            }), 404
+        return jsonify(item), 200
+
+    @app.get("/api/history/<run_id>")
+    def get_single_history_api(run_id: str):
+        return _handle_get_single_history(run_id)
+
+    @app.get("/api/v1/history/<run_id>")
+    def get_single_history_v1_api(run_id: str):
+        return _handle_get_single_history(run_id)
+
+    def _handle_delete_single_history(run_id: str):
+        deleted = get_history_service().delete_run(run_id)
+        if not deleted:
+            return jsonify({
+                "error": f"Analysis run '{run_id}' not found",
+                "code": "RUN_NOT_FOUND",
+            }), 404
+        return jsonify({"status": "deleted", "id": run_id}), 200
+
+    @app.delete("/api/history/<run_id>")
+    def delete_single_history_api(run_id: str):
+        return _handle_delete_single_history(run_id)
+
+    @app.delete("/api/v1/history/<run_id>")
+    def delete_single_history_v1_api(run_id: str):
+        return _handle_delete_single_history(run_id)
+
+    def _handle_clear_history():
+        count = get_history_service().clear_runs()
+        return jsonify({"status": "cleared", "deleted_count": count}), 200
+
+    @app.delete("/api/history")
+    def clear_history_api():
+        return _handle_clear_history()
+
+    @app.delete("/api/v1/history")
+    def clear_history_v1_api():
+        return _handle_clear_history()
+
     return app
+
 
 
 if __name__ == "__main__":

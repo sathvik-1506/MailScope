@@ -83,6 +83,7 @@ export default function AnalyzerPage() {
 
       // Record this run in session history
       addBatchToHistory({
+        id: (data as any).batchId,
         title: `Batch (${data.length} addresses)`,
         addressesCount: data.length,
         deliveredCount: data.filter((r) => r.verdict === "likely_delivered").length,
@@ -91,6 +92,7 @@ export default function AnalyzerPage() {
         smtpProbed: smtpEnabled,
         results: data,
       });
+
     } catch (err: unknown) {
       if (err instanceof APIClientError) {
         setErrorMessage(err.message);
