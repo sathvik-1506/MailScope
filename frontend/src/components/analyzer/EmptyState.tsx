@@ -22,7 +22,7 @@ export default function EmptyState({ onLoadSample }: EmptyStateProps) {
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
         <Button variant="secondary" size="sm" onClick={onLoadSample}>
           <Sparkles className="h-4 w-4 text-brand-400" aria-hidden="true" />
-          <span>Load Sample Batch & Simulate</span>
+          <span>Load Sample Batch</span>
         </Button>
       </div>
 

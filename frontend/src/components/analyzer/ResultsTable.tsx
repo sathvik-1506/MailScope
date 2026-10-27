@@ -180,7 +180,7 @@ export default function ResultsTable({
                   {/* Address */}
                   <td className="px-4 py-3.5 font-mono text-text-primary font-medium">
                     <div className="flex items-center gap-2">
-                      <span className="truncate max-w-[200px] sm:max-w-[240px]">
+                      <span className="truncate max-w-[200px] sm:max-w-[240px]" title={row.address}>
                         {row.address}
                       </span>
                       {row.isFixture && (
