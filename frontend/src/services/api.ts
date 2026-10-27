@@ -14,6 +14,10 @@ import type {
   Verdict,
   ExtractionResponse,
   HistoryListResponse,
+  SyntaxValidationStatus,
+  DNSValidationStatus,
+  SMTPProbeStatusType,
+  MailboxExistenceStatus,
 } from "../types";
 
 
@@ -192,7 +196,44 @@ export function mapBackendToDetailedResult(
     smtpStatus = "unavailable";
   }
 
-  // 5. Construct granular pipeline checks
+    // 5. Determine independent check dimensions
+    const syntaxValidation: SyntaxValidationStatus =
+      backendResult.syntax_validation ||
+      (syntaxStatus === "passed" ? "VALID" : "INVALID");
+
+    const dnsMxValidation: DNSValidationStatus =
+      backendResult.dns_mx_validation ||
+      (dnsStatus === "passed" || routingStatus === "passed"
+        ? "CONFIGURED"
+        : dnsStatus === "inconclusive"
+        ? "UNKNOWN"
+        : "NOT_CONFIGURED");
+
+    const smtpProbe: SMTPProbeStatusType =
+      backendResult.smtp_probe ||
+      (smtpStatus === "passed"
+        ? "SUCCESS"
+        : smtpStatus === "failed"
+        ? "REJECTED"
+        : smtpStatus === "unavailable" || reason_code === "SMTP_UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : smtpStatus === "skipped"
+        ? "NOT_TESTED"
+        : "TIMEOUT");
+
+    const mailboxExistence: MailboxExistenceStatus =
+      backendResult.mailbox_existence ||
+      (smtpProbe === "SUCCESS"
+        ? "CONFIRMED"
+        : smtpProbe === "REJECTED"
+        ? "REJECTED"
+        : syntaxValidation === "INVALID" || dnsMxValidation === "NOT_CONFIGURED"
+        ? "INVALID"
+        : dnsMxValidation === "UNKNOWN"
+        ? "UNKNOWN"
+        : "UNCONFIRMED");
+
+  // 6. Construct granular pipeline checks
   const checks: CheckItem[] = [
     {
       id: `chk-${idx}-1`,
@@ -201,11 +242,11 @@ export function mapBackendToDetailedResult(
       status: syntaxStatus,
       detail:
         syntax_evidence?.reason ??
-        (syntaxStatus === "passed"
+        (syntaxValidation === "VALID"
           ? "Address format satisfies RFC specification."
           : syntaxStatus === "skipped"
           ? "Syntax validation skipped."
-          : "Syntax validation failed or unavailable."),
+          : "Syntax validation failed or invalid."),
     },
     {
       id: `chk-${idx}-2`,
@@ -245,12 +286,14 @@ export function mapBackendToDetailedResult(
       status: smtpStatus,
       detail:
         smtp_evidence?.reason ??
-        (smtpStatus === "skipped"
+        (smtpProbe === "NOT_TESTED" || smtpStatus === "skipped"
           ? "SMTP verification was not enabled for this request."
-          : smtpStatus === "unavailable"
-          ? "SMTP server unreachable or outbound port 25 blocked."
-          : smtpStatus === "inconclusive"
-          ? "SMTP evaluation inconclusive."
+          : smtpProbe === "UNAVAILABLE" || smtpStatus === "unavailable"
+          ? "Unavailable from current hosting environment: Outbound port 25 connection blocked or unreachable."
+          : smtpProbe === "TIMEOUT"
+          ? "SMTP probe connection or handshake timed out."
+          : smtpProbe === "REJECTED"
+          ? "Target server explicitly rejected recipient during handshake."
           : "SMTP handshake evaluation completed."),
     },
   ];
@@ -263,6 +306,10 @@ export function mapBackendToDetailedResult(
     verdict,
     reason: explanation || safeEvidence[0] || "Analysis complete.",
     reasonCode: reason_code,
+    syntaxValidation,
+    dnsMxValidation,
+    smtpProbe,
+    mailboxExistence,
     syntaxStatus,
     dnsStatus,
     routingStatus,

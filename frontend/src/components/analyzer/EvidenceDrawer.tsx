@@ -88,10 +88,12 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
           {/* Verdict Banner */}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-primary p-3">
             <div className="flex items-center gap-2.5">
-              <Badge color={verdictMeta.badgeColor}>{verdictMeta.label}</Badge>
+              <Badge color={verdictMeta.badgeColor}>
+                {result.verdict === "unknown" ? "Unknown / Insufficient evidence" : verdictMeta.label}
+              </Badge>
               {result.reasonCode && (
                 <span className="text-xs text-text-secondary">
-                  Reason Code: <strong className="font-mono text-text-primary">{result.reasonCode}</strong>
+                  Signal: <strong className="font-mono text-text-primary">{result.reasonCode}</strong>
                 </span>
               )}
             </div>
@@ -108,9 +110,173 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
             <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">
               Primary Assessment
             </h3>
-            <p className="rounded-lg border border-border-subtle bg-surface-primary/60 p-3.5 text-sm leading-relaxed text-text-secondary">
+            <p className="rounded-lg border border-border-subtle bg-surface-primary/60 p-3.5 text-sm leading-relaxed text-text-secondary break-words">
               {result.reason}
             </p>
+          </div>
+
+          {/* Independent Verification Dimensions */}
+          <div className="rounded-lg border border-border-subtle bg-surface-primary p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Independent Verification Breakdown
+              </h3>
+              <span className="text-[10px] font-mono text-text-muted">
+                Multi-Signal Audit
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 1. Syntax */}
+              <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-semibold text-text-primary">Syntax</span>
+                  <CheckStatusPill
+                    status={
+                      result.syntaxValidation === "VALID" || result.syntaxStatus === "passed"
+                        ? "passed"
+                        : "failed"
+                    }
+                    label={
+                      result.syntaxValidation === "VALID" || result.syntaxStatus === "passed"
+                        ? "Valid"
+                        : "Invalid"
+                    }
+                    compact
+                  />
+                </div>
+                <p className="text-[11px] text-text-secondary leading-snug">
+                  {result.syntaxValidation === "VALID" || result.syntaxStatus === "passed"
+                    ? "Passes RFC 5321/5322 grammar, length limits, and label bounds."
+                    : "Address format violates RFC specifications or bounds."}
+                </p>
+              </div>
+
+              {/* 2. DNS/MX Configuration */}
+              <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-semibold text-text-primary">DNS / MX</span>
+                  <CheckStatusPill
+                    status={
+                      result.dnsMxValidation === "CONFIGURED" || result.dnsStatus === "passed"
+                        ? "passed"
+                        : result.dnsMxValidation === "NOT_CONFIGURED" || result.dnsStatus === "failed"
+                        ? "failed"
+                        : "inconclusive"
+                    }
+                    label={
+                      result.dnsMxValidation === "CONFIGURED" || result.dnsStatus === "passed"
+                        ? "Configured"
+                        : result.dnsMxValidation === "NOT_CONFIGURED" || result.dnsStatus === "failed"
+                        ? "Not Configured"
+                        : "Unknown"
+                    }
+                    compact
+                  />
+                </div>
+                <p className="text-[11px] text-text-secondary leading-snug">
+                  {result.dnsMxValidation === "CONFIGURED" || result.dnsStatus === "passed"
+                    ? "Domain has usable mail-routing configuration (active MX or fallback A/AAAA)."
+                    : result.dnsMxValidation === "NOT_CONFIGURED" || result.dnsStatus === "failed"
+                    ? "Domain publishes no mail routing (or publishes Null MX per RFC 7505)."
+                    : "DNS outcome could not be determined due to resolver timeout or SERVFAIL."}
+                </p>
+              </div>
+
+              {/* 3. SMTP Probe */}
+              <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-semibold text-text-primary">SMTP Probe</span>
+                  <CheckStatusPill
+                    status={
+                      result.smtpProbe === "SUCCESS" || result.smtpStatus === "passed"
+                        ? "passed"
+                        : result.smtpProbe === "REJECTED" || result.smtpStatus === "failed"
+                        ? "failed"
+                        : result.smtpProbe === "UNAVAILABLE" || result.smtpStatus === "unavailable"
+                        ? "unavailable"
+                        : result.smtpProbe === "TIMEOUT" || result.smtpStatus === "inconclusive"
+                        ? "inconclusive"
+                        : "skipped"
+                    }
+                    label={
+                      result.smtpProbe === "SUCCESS" || result.smtpStatus === "passed"
+                        ? "Success"
+                        : result.smtpProbe === "REJECTED" || result.smtpStatus === "failed"
+                        ? "Rejected"
+                        : result.smtpProbe === "UNAVAILABLE" || result.smtpStatus === "unavailable"
+                        ? "Unavailable"
+                        : result.smtpProbe === "TIMEOUT" || result.smtpStatus === "inconclusive"
+                        ? "Timeout"
+                        : "Not Tested"
+                    }
+                    compact
+                    title={
+                      result.smtpProbe === "UNAVAILABLE" || result.smtpStatus === "unavailable"
+                        ? "Unavailable from the current hosting environment"
+                        : undefined
+                    }
+                  />
+                </div>
+                <p className="text-[11px] text-text-secondary leading-snug break-words">
+                  {result.smtpProbe === "UNAVAILABLE" || result.smtpStatus === "unavailable"
+                    ? "Unavailable from current hosting environment: Outbound port 25 connection blocked or network unreachable."
+                    : result.smtpProbe === "NOT_TESTED" || result.smtpStatus === "skipped"
+                    ? "SMTP probing was disabled or omitted for this request."
+                    : result.smtpProbe === "TIMEOUT"
+                    ? "Connection or response timed out during SMTP handshake."
+                    : result.smtpProbe === "REJECTED"
+                    ? "Destination mail server explicitly rejected recipient."
+                    : "Target mail server acknowledged recipient probe (250 OK)."}
+                </p>
+              </div>
+
+              {/* 4. Mailbox Existence */}
+              <div className="rounded-md border border-border-subtle bg-surface-secondary/70 p-3">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-semibold text-text-primary">Mailbox Existence</span>
+                  <CheckStatusPill
+                    status={
+                      result.mailboxExistence === "CONFIRMED"
+                        ? "passed"
+                        : result.mailboxExistence === "REJECTED" || result.mailboxExistence === "INVALID"
+                        ? "failed"
+                        : result.mailboxExistence === "UNCONFIRMED"
+                        ? "inconclusive"
+                        : "skipped"
+                    }
+                    label={
+                      result.mailboxExistence === "CONFIRMED"
+                        ? "Confirmed"
+                        : result.mailboxExistence === "REJECTED"
+                        ? "Rejected"
+                        : result.mailboxExistence === "UNCONFIRMED"
+                        ? "Unconfirmed"
+                        : result.mailboxExistence === "INVALID"
+                        ? "Invalid"
+                        : "Unknown"
+                    }
+                    compact
+                    title={
+                      result.mailboxExistence === "UNCONFIRMED"
+                        ? "Mailbox existence unconfirmed without direct SMTP probe"
+                        : undefined
+                    }
+                  />
+                </div>
+                <p className="text-[11px] text-text-secondary leading-snug">
+                  {result.mailboxExistence === "CONFIRMED"
+                    ? "Recipient acknowledged by destination server (subject to catch-all caveat)."
+                    : result.mailboxExistence === "UNCONFIRMED"
+                    ? "Unconfirmed: Domain routing is valid, but mailbox existence cannot be proven without direct SMTP probe."
+                    : result.mailboxExistence === "REJECTED"
+                    ? "Explicit recipient rejection observed from destination server."
+                    : result.mailboxExistence === "INVALID"
+                    ? "Mailbox cannot exist because address syntax is invalid or domain lacks mail routing."
+                    : "Inconclusive due to temporary DNS resolution failure."}
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Check Pipeline (Passed, Failed, Inconclusive, Skipped, Unavailable) */}
@@ -144,7 +310,7 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
                       <CheckStatusPill status={chk.status} compact />
                     </div>
                   </div>
-                  <p className="text-xs text-text-secondary leading-relaxed">
+                  <p className="text-xs text-text-secondary leading-relaxed break-words">
                     {chk.detail}
                   </p>
                 </div>

@@ -544,3 +544,199 @@ def test_api_input_validation() -> None:
     # Empty list
     resp = client.post("/api/analyze", json={"addresses": []})
     assert resp.status_code == 400
+
+
+def test_independent_validation_dimensions() -> None:
+    """Verify the 4 independent check dimensions across all deliverability outcomes."""
+    syntax_valid = _make_syntax("example.com")
+    syntax_invalid = SyntaxResult(
+        valid=False,
+        normalized=None,
+        original="bad@@syntax..com",
+        reason="Address contains invalid syntax.",
+    )
+
+    dns_configured = DNSResult(
+        status=DNSStatus.HAS_MX,
+        domain="example.com",
+        mx_hosts=["mail.example.com"],
+        reason="Found MX record.",
+    )
+    dns_no_routing = DNSResult(
+        status=DNSStatus.NO_RECORDS,
+        domain="example.com",
+        reason="No MX or fallback A/AAAA records found.",
+    )
+    dns_timeout = DNSResult(
+        status=DNSStatus.TIMEOUT,
+        domain="example.com",
+        reason="Nameserver query timed out.",
+    )
+    dns_servfail = DNSResult(
+        status=DNSStatus.SERVFAIL,
+        domain="example.com",
+        reason="Nameserver returned SERVFAIL.",
+    )
+
+    smtp_disabled = SMTPResult(
+        status=SMTPStatus.DISABLED,
+        address="user@example.com",
+        reason="SMTP verification disabled.",
+    )
+    smtp_accepted = SMTPResult(
+        status=SMTPStatus.ACCEPTED,
+        address="user@example.com",
+        smtp_code=250,
+        reason="250 2.1.5 Recipient OK",
+    )
+    smtp_rejected = SMTPResult(
+        status=SMTPStatus.REJECTED,
+        address="user@example.com",
+        smtp_code=550,
+        reason="550 5.1.1 User unknown",
+    )
+    smtp_blocked = SMTPResult(
+        status=SMTPStatus.INCONCLUSIVE,
+        address="user@example.com",
+        is_blocked=True,
+        is_network_unreachable=True,
+        error_code="SMTP_UNAVAILABLE",
+        reason="Connection to 93.184.216.34:25 failed: [Errno 101] Network is unreachable",
+    )
+    smtp_timeout = SMTPResult(
+        status=SMTPStatus.INCONCLUSIVE,
+        address="user@example.com",
+        is_timeout=True,
+        error_code="SMTP_TIMEOUT",
+        reason="Connection to 93.184.216.34:25 timed out.",
+    )
+
+    # 1. Invalid syntax
+    res1 = classify(syntax_invalid)
+    assert res1.syntax_validation == "INVALID"
+    assert res1.dns_mx_validation == "NOT_CONFIGURED"
+    assert res1.smtp_probe == "NOT_TESTED"
+    assert res1.mailbox_existence == "INVALID"
+    assert res1.verdict == Verdict.LIKELY_BOUNCE
+
+    # 2. Valid syntax, configured MX, SMTP disabled
+    res2 = classify(syntax_valid, dns=dns_configured, smtp=smtp_disabled)
+    assert res2.syntax_validation == "VALID"
+    assert res2.dns_mx_validation == "CONFIGURED"
+    assert res2.smtp_probe == "NOT_TESTED"
+    assert res2.mailbox_existence == "UNCONFIRMED"
+    assert res2.verdict == Verdict.UNKNOWN
+
+    # 3. Valid syntax, no usable mail routing
+    res3 = classify(syntax_valid, dns=dns_no_routing)
+    assert res3.syntax_validation == "VALID"
+    assert res3.dns_mx_validation == "NOT_CONFIGURED"
+    assert res3.smtp_probe == "NOT_TESTED"
+    assert res3.mailbox_existence == "INVALID"
+    assert res3.verdict == Verdict.LIKELY_BOUNCE
+
+    # 4. DNS timeout
+    res4 = classify(syntax_valid, dns=dns_timeout)
+    assert res4.syntax_validation == "VALID"
+    assert res4.dns_mx_validation == "UNKNOWN"
+    assert res4.smtp_probe == "NOT_TESTED"
+    assert res4.mailbox_existence == "UNKNOWN"
+    assert res4.verdict == Verdict.UNKNOWN
+
+    # 5. DNS temporary failure (SERVFAIL)
+    res5 = classify(syntax_valid, dns=dns_servfail)
+    assert res5.syntax_validation == "VALID"
+    assert res5.dns_mx_validation == "UNKNOWN"
+    assert res5.smtp_probe == "NOT_TESTED"
+    assert res5.mailbox_existence == "UNKNOWN"
+    assert res5.verdict == Verdict.UNKNOWN
+
+    # 6. SMTP connection failure caused by unreachable network (e.g. Render port 25 blocked)
+    res6 = classify(syntax_valid, dns=dns_configured, smtp=smtp_blocked)
+    assert res6.syntax_validation == "VALID"
+    assert res6.dns_mx_validation == "CONFIGURED"
+    assert res6.smtp_probe == "UNAVAILABLE"
+    assert res6.mailbox_existence == "UNCONFIRMED"
+    assert res6.verdict == Verdict.UNKNOWN
+    # CRITICAL: Verify specifically that an SMTP connection failure NEVER turns a valid address into a bounce/invalid
+    assert res6.verdict != Verdict.LIKELY_BOUNCE
+    assert res6.syntax_validation != "INVALID"
+
+    # 7. SMTP connection timeout
+    res7 = classify(syntax_valid, dns=dns_configured, smtp=smtp_timeout)
+    assert res7.syntax_validation == "VALID"
+    assert res7.dns_mx_validation == "CONFIGURED"
+    assert res7.smtp_probe == "TIMEOUT"
+    assert res7.mailbox_existence == "UNCONFIRMED"
+    assert res7.verdict == Verdict.UNKNOWN
+    assert res7.verdict != Verdict.LIKELY_BOUNCE
+
+    # 8. Explicit SMTP recipient rejection (550)
+    res8 = classify(syntax_valid, dns=dns_configured, smtp=smtp_rejected)
+    assert res8.syntax_validation == "VALID"
+    assert res8.dns_mx_validation == "CONFIGURED"
+    assert res8.smtp_probe == "REJECTED"
+    assert res8.mailbox_existence == "REJECTED"
+    assert res8.verdict == Verdict.LIKELY_BOUNCE
+
+    # 9. SMTP success (250 OK)
+    res9 = classify(syntax_valid, dns=dns_configured, smtp=smtp_accepted)
+    assert res9.syntax_validation == "VALID"
+    assert res9.dns_mx_validation == "CONFIGURED"
+    assert res9.smtp_probe == "SUCCESS"
+    assert res9.mailbox_existence == "CONFIRMED"
+    assert res9.verdict == Verdict.LIKELY_DELIVERED
+    assert any("catch-all" in lim.lower() for lim in res9.limitations)
+
+
+@patch("backend.app.check_dns")
+@patch("backend.app.check_smtp")
+def test_batch_with_different_outcomes(mock_check_smtp: MagicMock, mock_check_dns: MagicMock) -> None:
+    """POST /api/analyze with a batch containing different deliverability outcomes."""
+    mock_check_dns.return_value = DNSResult(
+        status=DNSStatus.HAS_MX,
+        state="passed",
+        domain="example.com",
+        mx_hosts=["mail.example.com"],
+        mx_status="found",
+        mx_hosts_resolve=True,
+        reason="Found MX record.",
+    )
+
+    mock_check_smtp.return_value = SMTPResult(
+        status=SMTPStatus.INCONCLUSIVE,
+        address="valid@example.com",
+        is_blocked=True,
+        is_network_unreachable=True,
+        error_code="SMTP_UNAVAILABLE",
+        reason="Connection to 93.184.216.34:25 failed: [Errno 101] Network is unreachable",
+    )
+
+    app = create_app()
+    client = app.test_client()
+
+    payload = {
+        "addresses": ["invalid@@syntax..com", "valid@example.com"],
+        "smtp_enabled": True,
+    }
+    resp = client.post("/api/analyze", json=payload)
+    assert resp.status_code == 200
+    data = resp.get_json()
+
+    assert data["count"] == 2
+    results = data["results"]
+
+    # Address 1: Syntax invalid
+    r1 = results[0]
+    assert r1["syntax_validation"] == "INVALID"
+    assert r1["verdict"] == "likely_bounce"
+
+    # Address 2: Valid syntax, MX configured, SMTP port 25 blocked
+    r2 = results[1]
+    assert r2["syntax_validation"] == "VALID"
+    assert r2["dns_mx_validation"] == "CONFIGURED"
+    assert r2["smtp_probe"] == "UNAVAILABLE"
+    assert r2["mailbox_existence"] == "UNCONFIRMED"
+    assert r2["verdict"] == "unknown"
+    assert r2["verdict"] != "likely_bounce"
+

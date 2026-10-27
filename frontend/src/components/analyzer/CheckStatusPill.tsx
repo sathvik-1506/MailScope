@@ -4,9 +4,16 @@ import { CHECK_STATUS_META } from "../../types";
 interface CheckStatusPillProps {
   status: CheckStatus;
   compact?: boolean;
+  label?: string;
+  title?: string;
 }
 
-export default function CheckStatusPill({ status, compact = false }: CheckStatusPillProps) {
+export default function CheckStatusPill({
+  status,
+  compact = false,
+  label,
+  title,
+}: CheckStatusPillProps) {
   const meta = CHECK_STATUS_META[status] ?? {
     label: status,
     bgClass: "bg-surface-elevated",
@@ -14,8 +21,11 @@ export default function CheckStatusPill({ status, compact = false }: CheckStatus
     borderClass: "border-border-subtle",
   };
 
+  const displayLabel = label ?? meta.label;
+
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1 rounded font-mono font-medium border ${
         meta.bgClass
       } ${meta.textClass} ${meta.borderClass} ${
@@ -34,7 +44,7 @@ export default function CheckStatusPill({ status, compact = false }: CheckStatus
         }`}
         aria-hidden="true"
       />
-      <span>{meta.label}</span>
+      <span>{displayLabel}</span>
     </span>
   );
 }

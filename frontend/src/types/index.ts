@@ -81,6 +81,14 @@ export interface SMTPEvidence {
   reason: string;
 }
 
+export type SyntaxValidationStatus = "VALID" | "INVALID";
+
+export type DNSValidationStatus = "CONFIGURED" | "NOT_CONFIGURED" | "UNKNOWN";
+
+export type SMTPProbeStatusType = "SUCCESS" | "UNAVAILABLE" | "TIMEOUT" | "REJECTED" | "NOT_TESTED";
+
+export type MailboxExistenceStatus = "CONFIRMED" | "REJECTED" | "UNCONFIRMED" | "INVALID" | "UNKNOWN";
+
 export interface BackendAddressResult {
   address: string;
   original_input?: string;
@@ -88,6 +96,10 @@ export interface BackendAddressResult {
   verdict: Verdict;
   reason_code: string;
   explanation: string;
+  syntax_validation?: SyntaxValidationStatus;
+  dns_mx_validation?: DNSValidationStatus;
+  smtp_probe?: SMTPProbeStatusType;
+  mailbox_existence?: MailboxExistenceStatus;
   syntax_evidence?: SyntaxEvidence;
   dns_evidence?: DNSEvidence;
   smtp_evidence?: SMTPEvidence;
@@ -120,6 +132,10 @@ export interface DetailedAddressResult {
   verdict: Verdict;
   reason: string;
   reasonCode?: string;
+  syntaxValidation?: SyntaxValidationStatus;
+  dnsMxValidation?: DNSValidationStatus;
+  smtpProbe?: SMTPProbeStatusType;
+  mailboxExistence?: MailboxExistenceStatus;
   syntaxStatus: CheckStatus;
   dnsStatus: CheckStatus;
   routingStatus: CheckStatus;

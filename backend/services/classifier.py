@@ -107,6 +107,33 @@ class ReasonCode(str, Enum):
     MAILBOX_REJECTED = "MAILBOX_REJECTED"
 
 
+class SyntaxValidation(str, Enum):
+    VALID = "VALID"
+    INVALID = "INVALID"
+
+
+class DNSValidation(str, Enum):
+    CONFIGURED = "CONFIGURED"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    UNKNOWN = "UNKNOWN"
+
+
+class SMTPProbeStatus(str, Enum):
+    SUCCESS = "SUCCESS"
+    UNAVAILABLE = "UNAVAILABLE"
+    TIMEOUT = "TIMEOUT"
+    REJECTED = "REJECTED"
+    NOT_TESTED = "NOT_TESTED"
+
+
+class MailboxExistence(str, Enum):
+    CONFIRMED = "CONFIRMED"
+    REJECTED = "REJECTED"
+    UNCONFIRMED = "UNCONFIRMED"
+    INVALID = "INVALID"
+    UNKNOWN = "UNKNOWN"
+
+
 @dataclass
 class ClassificationResult:
     address: str
@@ -114,6 +141,10 @@ class ClassificationResult:
     reason_code: str
     explanation: str
     normalized_address: str | None = None
+    syntax_validation: str = "VALID"
+    dns_mx_validation: str = "CONFIGURED"
+    smtp_probe: str = "NOT_TESTED"
+    mailbox_existence: str = "UNCONFIRMED"
     syntax_evidence: dict[str, Any] = field(default_factory=dict)
     dns_evidence: dict[str, Any] = field(default_factory=dict)
     smtp_evidence: dict[str, Any] = field(default_factory=dict)
@@ -135,6 +166,10 @@ class ClassificationResult:
             "verdict": self.verdict.value if isinstance(self.verdict, Verdict) else str(self.verdict),
             "reason_code": self.reason_code,
             "explanation": self.explanation,
+            "syntax_validation": self.syntax_validation,
+            "dns_mx_validation": self.dns_mx_validation,
+            "smtp_probe": self.smtp_probe,
+            "mailbox_existence": self.mailbox_existence,
             "syntax_evidence": self.syntax_evidence,
             "dns_evidence": self.dns_evidence,
             "smtp_evidence": self.smtp_evidence,
@@ -187,6 +222,10 @@ def classify(
             verdict=Verdict.LIKELY_BOUNCE,
             reason_code=ReasonCode.INVALID_SYNTAX.value,
             explanation=f"Email address syntax violates RFC specifications: {syntax.reason}",
+            syntax_validation=SyntaxValidation.INVALID.value,
+            dns_mx_validation=DNSValidation.NOT_CONFIGURED.value,
+            smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
+            mailbox_existence=MailboxExistence.INVALID.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -210,6 +249,10 @@ def classify(
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.CHECKS_NOT_ATTEMPTED.value,
             explanation="DNS check was not performed; domain resolution and routing were not attempted.",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.UNKNOWN.value,
+            smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
+            mailbox_existence=MailboxExistence.UNKNOWN.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -266,6 +309,10 @@ def classify(
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.AMBIGUOUS_EVIDENCE.value,
             explanation=f"Conflicting technical evidence: DNS reported '{dns.status.value}' but SMTP reported '{smtp.status.value}'.",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.UNKNOWN.value,
+            smtp_probe=SMTPProbeStatus.SUCCESS.value if smtp.status == SMTPStatus.ACCEPTED else SMTPProbeStatus.REJECTED.value,
+            mailbox_existence=MailboxExistence.UNKNOWN.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -308,6 +355,10 @@ def classify(
             verdict=Verdict.LIKELY_BOUNCE,
             reason_code=reason_code,
             explanation=explanation,
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.NOT_CONFIGURED.value,
+            smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
+            mailbox_existence=MailboxExistence.INVALID.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -330,6 +381,10 @@ def classify(
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.DNS_TIMEOUT.value,
             explanation=f"DNS resolution timed out for domain '{dns.domain}': {dns.reason}",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.UNKNOWN.value,
+            smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
+            mailbox_existence=MailboxExistence.UNKNOWN.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -352,6 +407,10 @@ def classify(
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.DNS_TEMPORARY_FAILURE.value,
             explanation=f"DNS resolution encountered a temporary failure: {dns.reason}",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.UNKNOWN.value,
+            smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
+            mailbox_existence=MailboxExistence.UNKNOWN.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -412,6 +471,10 @@ def classify(
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.MAILBOX_UNCONFIRMED.value,
             explanation=explanation,
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.CONFIGURED.value,
+            smtp_probe=SMTPProbeStatus.NOT_TESTED.value,
+            mailbox_existence=MailboxExistence.UNCONFIRMED.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence={"status": "disabled", "reason": "SMTP verification was not enabled."},
@@ -439,6 +502,10 @@ def classify(
             verdict=Verdict.LIKELY_DELIVERED,
             reason_code=ReasonCode.MAILBOX_ACCEPTED.value,
             explanation=f"Target mail server accepted recipient probe: {smtp.reason}",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.CONFIGURED.value,
+            smtp_probe=SMTPProbeStatus.SUCCESS.value,
+            mailbox_existence=MailboxExistence.CONFIRMED.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -461,7 +528,11 @@ def classify(
             normalized_address=syntax.normalized,
             verdict=Verdict.LIKELY_BOUNCE,
             reason_code=ReasonCode.MAILBOX_REJECTED.value,
-            explanation=f"Target mail server explicitly rejected recipient: {smtp.reason}",
+            explanation=f"Target mail server explicitly rejected recipient during SMTP probe: {smtp.reason}",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.CONFIGURED.value,
+            smtp_probe=SMTPProbeStatus.REJECTED.value,
+            mailbox_existence=MailboxExistence.REJECTED.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -494,7 +565,11 @@ def classify(
             normalized_address=syntax.normalized,
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.SMTP_UNAVAILABLE.value,
-            explanation=f"SMTP verification could not be completed because outbound port 25 connection was blocked or unreachable: {smtp.reason}",
+            explanation=f"SMTP verification could not be completed because outbound port 25 connection was blocked or unreachable from hosting environment: {smtp.reason}",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.CONFIGURED.value,
+            smtp_probe=SMTPProbeStatus.UNAVAILABLE.value,
+            mailbox_existence=MailboxExistence.UNCONFIRMED.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -516,6 +591,10 @@ def classify(
             verdict=Verdict.UNKNOWN,
             reason_code=ReasonCode.SMTP_TIMEOUT.value,
             explanation=f"SMTP connection or response timed out: {smtp.reason}",
+            syntax_validation=SyntaxValidation.VALID.value,
+            dns_mx_validation=DNSValidation.CONFIGURED.value,
+            smtp_probe=SMTPProbeStatus.TIMEOUT.value,
+            mailbox_existence=MailboxExistence.UNCONFIRMED.value,
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -536,6 +615,12 @@ def classify(
         verdict=Verdict.UNKNOWN,
         reason_code=ReasonCode.AMBIGUOUS_EVIDENCE.value,
         explanation=f"SMTP probe response was ambiguous or inconclusive: {smtp.reason}",
+        syntax_validation=SyntaxValidation.VALID.value,
+        dns_mx_validation=DNSValidation.CONFIGURED.value,
+        smtp_probe=SMTPProbeStatus.TIMEOUT.value if getattr(smtp, "is_timeout", False) else (
+            SMTPProbeStatus.UNAVAILABLE.value if getattr(smtp, "is_blocked", False) else SMTPProbeStatus.NOT_TESTED.value
+        ),
+        mailbox_existence=MailboxExistence.UNCONFIRMED.value,
         syntax_evidence=syntax_evidence,
         dns_evidence=dns_evidence,
         smtp_evidence=smtp_evidence,

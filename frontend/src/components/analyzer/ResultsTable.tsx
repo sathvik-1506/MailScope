@@ -146,10 +146,10 @@ export default function ResultsTable({
                 DNS / MX
               </th>
               <th scope="col" className="px-3 py-3.5 text-center">
-                Routing
+                SMTP Probe
               </th>
               <th scope="col" className="px-3 py-3.5 text-center">
-                SMTP
+                Mailbox
               </th>
               <th scope="col" className="px-4 py-3.5">
                 Technical Assessment / Reason
@@ -162,6 +162,52 @@ export default function ResultsTable({
           <tbody className="divide-y divide-border-subtle text-xs text-text-secondary">
             {sorted.map((row) => {
               const meta = VERDICT_META[row.verdict];
+              const isSyntaxValid = row.syntaxValidation === "VALID" || row.syntaxStatus === "passed";
+              const isDnsConfigured = row.dnsMxValidation === "CONFIGURED" || row.dnsStatus === "passed";
+              const isDnsNotConfigured = row.dnsMxValidation === "NOT_CONFIGURED" || row.dnsStatus === "failed";
+              
+              const smtpStatus =
+                row.smtpProbe === "SUCCESS" || row.smtpStatus === "passed"
+                  ? "passed"
+                  : row.smtpProbe === "REJECTED" || row.smtpStatus === "failed"
+                  ? "failed"
+                  : row.smtpProbe === "UNAVAILABLE" || row.smtpStatus === "unavailable"
+                  ? "unavailable"
+                  : row.smtpProbe === "TIMEOUT" || row.smtpStatus === "inconclusive"
+                  ? "inconclusive"
+                  : "skipped";
+
+              const smtpLabel =
+                row.smtpProbe === "SUCCESS" || row.smtpStatus === "passed"
+                  ? "Success"
+                  : row.smtpProbe === "REJECTED" || row.smtpStatus === "failed"
+                  ? "Rejected"
+                  : row.smtpProbe === "UNAVAILABLE" || row.smtpStatus === "unavailable"
+                  ? "Unavailable"
+                  : row.smtpProbe === "TIMEOUT" || row.smtpStatus === "inconclusive"
+                  ? "Timeout"
+                  : "Not Tested";
+
+              const mailboxStatus =
+                row.mailboxExistence === "CONFIRMED"
+                  ? "passed"
+                  : row.mailboxExistence === "REJECTED" || row.mailboxExistence === "INVALID"
+                  ? "failed"
+                  : row.mailboxExistence === "UNCONFIRMED"
+                  ? "inconclusive"
+                  : "skipped";
+
+              const mailboxLabel =
+                row.mailboxExistence === "CONFIRMED"
+                  ? "Confirmed"
+                  : row.mailboxExistence === "REJECTED"
+                  ? "Rejected"
+                  : row.mailboxExistence === "UNCONFIRMED"
+                  ? "Unconfirmed"
+                  : row.mailboxExistence === "INVALID"
+                  ? "Invalid"
+                  : "Unknown";
+
               return (
                 <tr
                   key={row.id}
@@ -203,16 +249,42 @@ export default function ResultsTable({
 
                   {/* Check Pillars */}
                   <td className="px-3 py-3.5 text-center whitespace-nowrap">
-                    <CheckStatusPill status={row.syntaxStatus} compact />
+                    <CheckStatusPill
+                      status={isSyntaxValid ? "passed" : "failed"}
+                      label={isSyntaxValid ? "Valid" : "Invalid"}
+                      compact
+                    />
                   </td>
                   <td className="px-3 py-3.5 text-center whitespace-nowrap">
-                    <CheckStatusPill status={row.dnsStatus} compact />
+                    <CheckStatusPill
+                      status={isDnsConfigured ? "passed" : isDnsNotConfigured ? "failed" : "inconclusive"}
+                      label={isDnsConfigured ? "Configured" : isDnsNotConfigured ? "Not Configured" : "Unknown"}
+                      compact
+                    />
                   </td>
                   <td className="px-3 py-3.5 text-center whitespace-nowrap">
-                    <CheckStatusPill status={row.routingStatus} compact />
+                    <CheckStatusPill
+                      status={smtpStatus}
+                      label={smtpLabel}
+                      title={
+                        smtpLabel === "Unavailable"
+                          ? "Unavailable from the current hosting environment"
+                          : undefined
+                      }
+                      compact
+                    />
                   </td>
                   <td className="px-3 py-3.5 text-center whitespace-nowrap">
-                    <CheckStatusPill status={row.smtpStatus} compact />
+                    <CheckStatusPill
+                      status={mailboxStatus}
+                      label={mailboxLabel}
+                      title={
+                        mailboxLabel === "Unconfirmed"
+                          ? "Mailbox existence unconfirmed without direct SMTP probe"
+                          : undefined
+                      }
+                      compact
+                    />
                   </td>
 
                   {/* Reason summary */}
@@ -249,7 +321,7 @@ export default function ResultsTable({
           Click any row to open the full <strong className="text-text-secondary font-medium">Evidence Ledger</strong> and limitations breakdown.
         </div>
         <div className="font-mono text-[11px]">
-          Status legend: Passed (green) &bull; Failed (red) &bull; Inconclusive (amber) &bull; Skipped (gray)
+          Status legend: Valid / Configured / Confirmed (green) &bull; Unconfirmed / Timeout (amber) &bull; Invalid / Rejected (red) &bull; Unavailable (zinc) &bull; Not Tested (slate)
         </div>
       </div>
     </div>

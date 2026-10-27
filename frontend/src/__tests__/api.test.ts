@@ -214,4 +214,46 @@ describe("Frontend API Client Mapping", () => {
     assert.equal(item1.address, item2.address);
     assert.notEqual(item1.id, item2.id, "Duplicate addresses must receive distinct IDs for table row rendering");
   });
+
+  it("maps separate statuses for Syntax, DNS/MX, SMTP probe, and Mailbox existence", () => {
+    // Scenario: Syntax valid, MX configured, but Render port 25 blocked
+    const renderBlockedResult: BackendAddressResult = {
+      address: "test@company.com",
+      verdict: "unknown",
+      reason_code: "SMTP_UNAVAILABLE",
+      explanation: "SMTP probe is unavailable from the current hosting environment (port 25 blocked).",
+      syntax_validation: "VALID",
+      dns_mx_validation: "CONFIGURED",
+      smtp_probe: "UNAVAILABLE",
+      mailbox_existence: "UNCONFIRMED",
+      syntax_evidence: { valid: true, reason: "RFC syntax format valid." },
+      dns_evidence: {
+        status: "has_mx",
+        domain: "company.com",
+        mx_hosts: ["mail.company.com"],
+        reason: "Authoritative MX record found.",
+      },
+      smtp_evidence: {
+        status: "unavailable",
+        reason: "Connection to 93.184.216.34:25 failed: [Errno 101] Network is unreachable",
+      },
+      evidence: ["Syntax valid", "MX active", "SMTP port 25 blocked"],
+      limitations: ["SMTP port 25 blocked by hosting environment."],
+    };
+
+    const detailed = mapBackendToDetailedResult(renderBlockedResult, 0);
+
+    // Verify 4 independent check dimensions
+    assert.equal(detailed.syntaxValidation, "VALID");
+    assert.equal(detailed.dnsMxValidation, "CONFIGURED");
+    assert.equal(detailed.smtpProbe, "UNAVAILABLE");
+    assert.equal(detailed.mailboxExistence, "UNCONFIRMED");
+    assert.equal(detailed.verdict, "unknown");
+
+    // Specifically verify SMTP network failure never causes invalid syntax or bounce verdict
+    assert.notEqual(detailed.verdict, "likely_bounce");
+    assert.notEqual(detailed.syntaxValidation, "INVALID");
+    assert.equal(detailed.syntaxStatus, "passed");
+    assert.equal(detailed.smtpStatus, "unavailable");
+  });
 });
