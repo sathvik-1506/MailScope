@@ -67,7 +67,6 @@ export interface BackendAddressResult {
   verdict: Verdict;
   reason_code: string;
   explanation: string;
-  confidence: number;
   syntax_evidence?: SyntaxEvidence;
   dns_evidence?: DNSEvidence;
   smtp_evidence?: SMTPEvidence;
@@ -98,7 +97,6 @@ export interface DetailedAddressResult {
   originalInput?: string;
   normalizedAddress?: string | null;
   verdict: Verdict;
-  confidence: number;
   reason: string;
   reasonCode?: string;
   syntaxStatus: CheckStatus;

@@ -17,7 +17,7 @@ const PREVIEW_ROWS: PreviewRow[] = [
   {
     address: "alice@acmecorp.com",
     verdict: "likely_delivered",
-    confidence: 0.87,
+    reasonCode: "MAILBOX_ACCEPTED",
     evidence: [
       "Address passes RFC 5321 syntax checks.",
       "DNS: Found 2 MX record(s): mx1.acmecorp.com, mx2.acmecorp.com",
@@ -30,7 +30,7 @@ const PREVIEW_ROWS: PreviewRow[] = [
   {
     address: "bob@nonexist.invalid",
     verdict: "likely_bounce",
-    confidence: 0.92,
+    reasonCode: "DOMAIN_NOT_FOUND",
     evidence: [
       "Address passes RFC 5321 syntax checks.",
       "DNS: Domain 'nonexist.invalid' does not exist (NXDOMAIN).",
@@ -42,7 +42,7 @@ const PREVIEW_ROWS: PreviewRow[] = [
   {
     address: "carol@timeout-mail.example",
     verdict: "unknown",
-    confidence: 0.35,
+    reasonCode: "DNS_TIMEOUT",
     evidence: [
       "Address passes RFC 5321 syntax checks.",
       "DNS inconclusive: DNS query timed out — result is inconclusive.",
@@ -56,7 +56,7 @@ const PREVIEW_ROWS: PreviewRow[] = [
 interface PreviewRow {
   address: string;
   verdict: "likely_delivered" | "likely_bounce" | "unknown";
-  confidence: number;
+  reasonCode: string;
   evidence: string[];
   limitations: string[];
 }
@@ -83,21 +83,6 @@ function VerdictLabel({ verdict }: { verdict: PreviewRow["verdict"] }) {
   };
   const m = map[verdict];
   return <Badge color={m.color}>{m.label}</Badge>;
-}
-
-function ConfidenceBar({ value }: { value: number }) {
-  const pct = Math.round(value * 100);
-  return (
-    <div className="flex items-center gap-2" aria-label={`Confidence ${pct}%`}>
-      <div className="h-1.5 w-16 rounded-full bg-surface-elevated overflow-hidden">
-        <div
-          className="h-full rounded-full bg-brand-400 transition-all duration-500"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs text-text-muted font-mono">{pct}%</span>
-    </div>
-  );
 }
 
 function EvidencePanel({ row }: { row: PreviewRow }) {
@@ -145,8 +130,10 @@ function PreviewRowItem({ row }: { row: PreviewRow }) {
         <span className="flex-1 font-mono text-sm text-text-primary truncate">
           {row.address}
         </span>
+        <span className="font-mono text-[11px] text-text-muted hidden sm:inline bg-surface-elevated px-2 py-0.5 rounded border border-border-subtle">
+          {row.reasonCode}
+        </span>
         <VerdictLabel verdict={row.verdict} />
-        <ConfidenceBar value={row.confidence} />
         {expanded
           ? <ChevronUp className="h-4 w-4 text-text-muted shrink-0" aria-hidden="true" />
           : <ChevronDown className="h-4 w-4 text-text-muted shrink-0" aria-hidden="true" />

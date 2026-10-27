@@ -85,7 +85,7 @@ describe("CSV Formula Injection Neutralization (CWE-1236)", () => {
 });
 
 describe("CSV Generation", () => {
-  it("generates proper CSV headers and rows for results", () => {
+  it("generates proper CSV headers and rows for results without uncalibrated confidence", () => {
     const sample = FIXTURE_RESULTS.slice(0, 2);
     const csv = generateResultsCsv(sample);
     const lines = csv.split("\r\n");
@@ -93,11 +93,15 @@ describe("CSV Generation", () => {
     // Header line check
     assert.ok(lines[0].includes('"Email Address"'));
     assert.ok(lines[0].includes('"Verdict"'));
+    assert.ok(lines[0].includes('"Reason Code"'));
+    assert.ok(!lines[0].includes('"Confidence"'), "Confidence header must be absent from CSV");
     assert.ok(lines[0].includes('"Primary Reason"'));
 
     // Record lines check
     assert.equal(lines.length, 3); // 1 header + 2 records
     assert.ok(lines[1].includes('"contact@example.com"'));
     assert.ok(lines[1].includes('"likely_delivered"'));
+    assert.ok(lines[1].includes('"MAILBOX_ACCEPTED"'));
+    assert.ok(!lines[1].includes("%"), "Arbitrary confidence percentages must be absent from CSV rows");
   });
 });

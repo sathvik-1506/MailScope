@@ -32,7 +32,7 @@ export function generateResultsCsv(results: DetailedAddressResult[]): string {
   const headers = [
     "Email Address",
     "Verdict",
-    "Confidence",
+    "Reason Code",
     "Syntax Status",
     "DNS Status",
     "Routing Status",
@@ -49,7 +49,7 @@ export function generateResultsCsv(results: DetailedAddressResult[]): string {
     return [
       r.address,
       r.verdict,
-      `${Math.round(r.confidence * 100)}%`,
+      r.reasonCode || "",
       r.syntaxStatus,
       r.dnsStatus,
       r.routingStatus,

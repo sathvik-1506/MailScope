@@ -121,7 +121,7 @@ smtp_checker.check_smtp()   <- disabled by default
     |  INCONCLUSIVE/DISABLED? -> UNKNOWN
     v
 classifier.classify()
-    +-> ClassificationResult(verdict, confidence, evidence[], limitations[])
+    +-> ClassificationResult(verdict, reason_code, evidence[], limitations[])
 ```
 
 ### 4.3 SMTP verification policy
@@ -185,7 +185,7 @@ cd frontend && npm run build
 ## 7. Phase 2 – Planned work
 
 - Full LandingPage design (hero, features, CTA)
-- Full AnalyzerPage UI (textarea input, results table, evidence expansion, confidence indicator)
+- Full AnalyzerPage UI (textarea input, results table, evidence expansion, reason code ledger)
 - `/api/v1/analyze` route fully implemented
 - Frontend test suite (Vitest)
 - Domain-level DNS result caching (in-memory, TTL-bound) to speed up batch analysis

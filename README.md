@@ -245,7 +245,6 @@ Analyzes a batch of email addresses across the verification pipeline.
       "verdict": "unknown",
       "reason_code": "MAILBOX_UNCONFIRMED",
       "explanation": "Domain has valid mail routing, but mailbox existence cannot be confirmed without SMTP probing.",
-      "confidence": 0.65,
       "checks_run": ["syntax", "dns"],
       "checks_skipped": ["smtp"],
       "evidence": [
@@ -263,7 +262,6 @@ Analyzes a batch of email addresses across the verification pipeline.
       "verdict": "likely_bounce",
       "reason_code": "INVALID_SYNTAX",
       "explanation": "The email address fails standard RFC 5321/5322 grammar and cannot receive mail.",
-      "confidence": 1.0,
       "checks_run": ["syntax"],
       "checks_skipped": ["dns", "smtp"],
       "evidence": [

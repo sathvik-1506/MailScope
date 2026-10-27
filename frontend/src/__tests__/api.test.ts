@@ -12,7 +12,6 @@ describe("Frontend API Client Mapping", () => {
       verdict: "likely_delivered",
       reason_code: "MAILBOX_ACCEPTED",
       explanation: "Target mail server accepted recipient probe: 250 OK",
-      confidence: 0.85,
       syntax_evidence: {
         valid: true,
         normalized: "alice@example.com",
@@ -51,6 +50,7 @@ describe("Frontend API Client Mapping", () => {
     assert.equal(detailed.smtpStatus, "passed");
     assert.equal(detailed.checks.length, 4);
     assert.equal(detailed.isFixture, false);
+    assert.equal("confidence" in detailed, false);
   });
 
   it("identifies skipped SMTP check when SMTP probing was disabled", () => {
@@ -59,7 +59,6 @@ describe("Frontend API Client Mapping", () => {
       verdict: "unknown",
       reason_code: "MAILBOX_UNCONFIRMED",
       explanation: "Domain exists but mailbox unconfirmed.",
-      confidence: 0.65,
       syntax_evidence: { valid: true, reason: "OK" },
       dns_evidence: { status: "has_mx", domain: "example.com", mx_hosts: ["mail.example.com"], reason: "MX found" },
       smtp_evidence: { status: "disabled", reason: "SMTP verification disabled." },
@@ -86,7 +85,6 @@ describe("Frontend API Client Mapping", () => {
       verdict: "unknown",
       reason_code: "DNS_TEMPORARY_FAILURE",
       explanation: "DNS query timed out (inconclusive).",
-      confidence: 0.2,
       syntax_evidence: { valid: true, reason: "OK" },
       dns_evidence: { status: "timeout", domain: "example.com", reason: "DNS query timed out" },
       checks_run: ["syntax", "dns"],
@@ -107,7 +105,6 @@ describe("Frontend API Client Mapping", () => {
       verdict: "unknown",
       reason_code: "SMTP_UNAVAILABLE",
       explanation: "Outbound port 25 appears blocked by ISP/firewall.",
-      confidence: 0.6,
       syntax_evidence: { valid: true, reason: "OK" },
       dns_evidence: { status: "has_mx", domain: "example.com", mx_hosts: ["mail.example.com"], reason: "MX found" },
       smtp_evidence: { status: "inconclusive", reason: "Connection refused on port 25" },

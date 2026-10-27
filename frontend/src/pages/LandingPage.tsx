@@ -169,7 +169,7 @@ const STEPS = [
     num: "03",
     icon: ClipboardList,
     title: "Review evidence",
-    desc: "Each address receives a verdict with confidence, supporting evidence, and documented limitations.",
+    desc: "Each address receives an explainable verdict, technical reason code, supporting evidence, and documented limitations.",
   },
 ] as const;
 

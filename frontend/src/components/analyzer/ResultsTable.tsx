@@ -36,7 +36,7 @@ export default function ResultsTable({
   onRetry,
   onDismissError,
 }: ResultsTableProps) {
-  const [sortField, setSortField] = useState<"address" | "confidence" | "verdict">("address");
+  const [sortField, setSortField] = useState<"address" | "verdict">("address");
   const [sortAsc, setSortAsc] = useState(true);
 
   // 1. Error state takes priority
@@ -79,8 +79,6 @@ export default function ResultsTable({
     let cmp = 0;
     if (sortField === "address") {
       cmp = a.address.localeCompare(b.address);
-    } else if (sortField === "confidence") {
-      cmp = a.confidence - b.confidence;
     } else if (sortField === "verdict") {
       cmp = a.verdict.localeCompare(b.verdict);
     }
@@ -98,7 +96,7 @@ export default function ResultsTable({
     );
   }
 
-  const handleSort = (field: "address" | "confidence" | "verdict") => {
+  const handleSort = (field: "address" | "verdict") => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
     } else {

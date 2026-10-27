@@ -33,7 +33,6 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
   if (!result) return null;
 
   const verdictMeta = VERDICT_META[result.verdict];
-  const confidencePct = Math.round(result.confidence * 100);
 
   return (
     <div
@@ -89,9 +88,11 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-primary p-3">
             <div className="flex items-center gap-2.5">
               <Badge color={verdictMeta.badgeColor}>{verdictMeta.label}</Badge>
-              <span className="text-xs text-text-secondary">
-                Confidence: <strong className="font-mono text-text-primary">{confidencePct}%</strong>
-              </span>
+              {result.reasonCode && (
+                <span className="text-xs text-text-secondary">
+                  Reason Code: <strong className="font-mono text-text-primary">{result.reasonCode}</strong>
+                </span>
+              )}
             </div>
             <div className="text-[11px] text-text-muted">
               {result.analysedAt ? new Date(result.analysedAt).toLocaleTimeString() : "Just now"}
