@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mapBackendToDetailedResult, APIClientError } from "../services/api";
 import type { BackendAddressResult } from "../types";
+import { VERDICT_META } from "../types";
 
 describe("Frontend API Client Mapping", () => {
   it("maps a successful backend response into DetailedAddressResult with checks", () => {
@@ -53,6 +54,34 @@ describe("Frontend API Client Mapping", () => {
     assert.equal("confidence" in detailed, false);
   });
 
+  it("maps each verdict correctly and aligns with VERDICT_META labels and colors", () => {
+    const verdicts: ("likely_delivered" | "likely_bounce" | "unknown")[] = [
+      "likely_delivered",
+      "likely_bounce",
+      "unknown",
+    ];
+
+    for (const v of verdicts) {
+      const res = mapBackendToDetailedResult(
+        {
+          address: `test-${v}@example.com`,
+          verdict: v,
+          reason_code: "TEST_REASON",
+          explanation: `Testing verdict ${v}`,
+          evidence: [],
+          limitations: [],
+        },
+        0
+      );
+
+      assert.equal(res.verdict, v);
+      assert.ok(VERDICT_META[res.verdict]);
+      assert.ok(VERDICT_META[res.verdict].label);
+      assert.ok(VERDICT_META[res.verdict].badgeColor);
+      assert.ok(VERDICT_META[res.verdict].colorClass);
+    }
+  });
+
   it("identifies skipped SMTP check when SMTP probing was disabled", () => {
     const backendResult: BackendAddressResult = {
       address: "bob@example.com",
@@ -73,10 +102,58 @@ describe("Frontend API Client Mapping", () => {
     assert.equal(detailed.verdict, "unknown");
   });
 
+  it("safely handles missing optional evidence objects without throwing", () => {
+    const minimalResult: BackendAddressResult = {
+      address: "sparse@example.com",
+      verdict: "unknown",
+      reason_code: "UNKNOWN",
+      explanation: "Sparse response with missing evidence blocks.",
+      evidence: [],
+      limitations: [],
+      // syntax_evidence, dns_evidence, smtp_evidence intentionally omitted
+    };
+
+    const detailed = mapBackendToDetailedResult(minimalResult, 0);
+    assert.equal(detailed.address, "sparse@example.com");
+    assert.equal(detailed.verdict, "unknown");
+    assert.equal(detailed.syntaxStatus, "unavailable");
+    assert.equal(detailed.dnsStatus, "unavailable");
+    assert.equal(detailed.routingStatus, "unavailable");
+    assert.equal(detailed.smtpStatus, "unavailable");
+    assert.equal(detailed.checks.length, 4);
+  });
+
+  it("safely handles unexpected response fields and malformed records", () => {
+    // Corrupted record with unexpected verdict string and non-array evidence
+    const corruptedRecord = {
+      address: "corrupt@example.com",
+      verdict: "INVALID_UNKNOWN_VERDICT",
+      evidence: "not-an-array",
+      limitations: null,
+      extra_unknown_field: 12345,
+    } as unknown as BackendAddressResult;
+
+    const detailed = mapBackendToDetailedResult(corruptedRecord, 0);
+    assert.equal(detailed.address, "corrupt@example.com");
+    assert.equal(detailed.verdict, "unknown"); // Safely fell back to unknown
+    assert.deepEqual(detailed.evidence, []);
+    assert.deepEqual(detailed.limitations, []);
+
+    // Completely null record
+    const nullDetailed = mapBackendToDetailedResult(null as unknown as BackendAddressResult, 5);
+    assert.equal(nullDetailed.verdict, "unknown");
+    assert.equal(nullDetailed.reasonCode, "MALFORMED_RECORD");
+  });
+
   it("APIClientError carries HTTP status and network flags without altering verdict", () => {
     const netErr = new APIClientError("Failed to fetch", undefined, "NETWORK_ERROR", true);
     assert.equal(netErr.isNetworkError, true);
     assert.equal(netErr.code, "NETWORK_ERROR");
+
+    const httpErr = new APIClientError("Payload too large", 413, "BATCH_SIZE_EXCEEDED", false);
+    assert.equal(httpErr.isNetworkError, false);
+    assert.equal(httpErr.status, 413);
+    assert.equal(httpErr.code, "BATCH_SIZE_EXCEEDED");
   });
 
   it("safely maps temporary DNS errors (timeout/servfail) to unknown verdict, never bounce", () => {
@@ -96,6 +173,7 @@ describe("Frontend API Client Mapping", () => {
     const detailed = mapBackendToDetailedResult(backendResult, 2);
     assert.equal(detailed.verdict, "unknown");
     assert.equal(detailed.dnsStatus, "inconclusive");
+    assert.equal(detailed.routingStatus, "inconclusive");
     assert.notEqual(detailed.verdict, "likely_bounce");
   });
 
@@ -118,5 +196,22 @@ describe("Frontend API Client Mapping", () => {
     assert.equal(detailed.verdict, "unknown");
     assert.equal(detailed.smtpStatus, "unavailable");
     assert.notEqual(detailed.verdict, "likely_bounce");
+  });
+
+  it("generates unique row IDs for duplicate addresses in the same batch", () => {
+    const backendItem: BackendAddressResult = {
+      address: "dup@example.com",
+      verdict: "unknown",
+      reason_code: "MAILBOX_UNCONFIRMED",
+      explanation: "Duplicate input item.",
+      evidence: [],
+      limitations: [],
+    };
+
+    const item1 = mapBackendToDetailedResult(backendItem, 0);
+    const item2 = mapBackendToDetailedResult(backendItem, 1);
+
+    assert.equal(item1.address, item2.address);
+    assert.notEqual(item1.id, item2.id, "Duplicate addresses must receive distinct IDs for table row rendering");
   });
 });

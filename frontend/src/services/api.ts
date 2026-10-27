@@ -10,6 +10,7 @@ import type {
   DetailedAddressResult,
   CheckStatus,
   CheckItem,
+  Verdict,
 } from "../types";
 
 // Read API base URL per Requirement 2
@@ -45,12 +46,34 @@ export function mapBackendToDetailedResult(
   backendResult: BackendAddressResult,
   idx: number
 ): DetailedAddressResult {
+  // Defensive guard against malformed or non-object items in backend responses
+  if (!backendResult || typeof backendResult !== "object") {
+    return {
+      id: `res-${idx}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      address: "unknown",
+      originalInput: "unknown",
+      normalizedAddress: null,
+      verdict: "unknown",
+      reason: "Malformed record returned by backend.",
+      reasonCode: "MALFORMED_RECORD",
+      syntaxStatus: "unavailable",
+      dnsStatus: "unavailable",
+      routingStatus: "unavailable",
+      smtpStatus: "unavailable",
+      checks: [],
+      evidence: [],
+      limitations: [],
+      isFixture: false,
+      analysedAt: new Date().toISOString(),
+    };
+  }
+
   const {
-    address,
+    address = "unknown",
     original_input,
     normalized_address,
-    verdict,
-    reason_code,
+    verdict: rawVerdict,
+    reason_code = "UNKNOWN",
     explanation,
     syntax_evidence,
     dns_evidence,
@@ -62,21 +85,42 @@ export function mapBackendToDetailedResult(
     analysed_at,
   } = backendResult;
 
+  // Validate verdict against allowed classifications
+  const verdict: Verdict =
+    rawVerdict === "likely_delivered" ||
+    rawVerdict === "likely_bounce" ||
+    rawVerdict === "unknown"
+      ? rawVerdict
+      : "unknown";
+
+  const safeEvidence = Array.isArray(evidence) ? evidence : [];
+  const safeLimitations = Array.isArray(limitations) ? limitations : [];
+  const safeChecksRun = Array.isArray(checks_run) ? checks_run : [];
+  const safeChecksSkipped = Array.isArray(checks_skipped) ? checks_skipped : [];
+
   // 1. Determine syntax check status
-  let syntaxStatus: CheckStatus = "passed";
-  if (checks_skipped.includes("syntax")) {
+  let syntaxStatus: CheckStatus = "unavailable";
+  if (safeChecksSkipped.includes("syntax")) {
     syntaxStatus = "skipped";
-  } else if (syntax_evidence) {
+  } else if (syntax_evidence && typeof syntax_evidence.valid === "boolean") {
     syntaxStatus = syntax_evidence.valid ? "passed" : "failed";
+  } else if (safeChecksRun.length > 0 && !safeChecksRun.includes("syntax")) {
+    syntaxStatus = "skipped";
+  } else {
+    syntaxStatus = "unavailable";
   }
 
   // 2. Determine DNS resolution status
-  // 2. Determine DNS resolution status
-  let dnsStatus: CheckStatus = "passed";
-  if (checks_skipped.includes("dns") || !checks_run.includes("dns")) {
+  let dnsStatus: CheckStatus = "unavailable";
+  if (safeChecksSkipped.includes("dns")) {
     dnsStatus = "skipped";
-  } else if (dns_evidence) {
-    if (dns_evidence.state && ["passed", "failed", "inconclusive", "unavailable", "skipped"].includes(dns_evidence.state)) {
+  } else if (dns_evidence && typeof dns_evidence === "object") {
+    if (
+      dns_evidence.state &&
+      ["passed", "failed", "inconclusive", "unavailable", "skipped"].includes(
+        dns_evidence.state
+      )
+    ) {
       dnsStatus = dns_evidence.state as CheckStatus;
     } else {
       const s = dns_evidence.status;
@@ -87,16 +131,24 @@ export function mapBackendToDetailedResult(
       } else if (s === "timeout" || s === "servfail" || s === "error") {
         dnsStatus = "inconclusive";
       } else {
-        dnsStatus = "failed";
+        dnsStatus = "unavailable";
       }
     }
+  } else if (safeChecksRun.length > 0 && !safeChecksRun.includes("dns")) {
+    dnsStatus = "skipped";
+  } else {
+    dnsStatus = "unavailable";
   }
 
   // 3. Determine routing status
-  let routingStatus: CheckStatus = "passed";
-  if (checks_skipped.includes("dns") || !checks_run.includes("dns")) {
+  let routingStatus: CheckStatus = "unavailable";
+  if (safeChecksSkipped.includes("dns")) {
     routingStatus = "skipped";
-  } else if (dns_evidence) {
+  } else if (dnsStatus === "inconclusive") {
+    routingStatus = "inconclusive";
+  } else if (dnsStatus === "unavailable") {
+    routingStatus = "unavailable";
+  } else if (dns_evidence && typeof dns_evidence === "object") {
     if (dns_evidence.has_implicit_mx || dns_evidence.status === "has_a") {
       routingStatus = "passed";
     } else if (dns_evidence.status === "has_mx") {
@@ -104,13 +156,17 @@ export function mapBackendToDetailedResult(
     } else {
       routingStatus = "failed";
     }
+  } else if (safeChecksRun.length > 0 && !safeChecksRun.includes("dns")) {
+    routingStatus = "skipped";
+  } else {
+    routingStatus = "unavailable";
   }
 
   // 4. Determine SMTP status
   let smtpStatus: CheckStatus = "skipped";
-  if (checks_skipped.includes("smtp") || !checks_run.includes("smtp")) {
+  if (safeChecksSkipped.includes("smtp")) {
     smtpStatus = "skipped";
-  } else if (smtp_evidence) {
+  } else if (smtp_evidence && typeof smtp_evidence === "object") {
     const s = smtp_evidence.status;
     if (s === "disabled") {
       smtpStatus = "skipped";
@@ -118,11 +174,17 @@ export function mapBackendToDetailedResult(
       smtpStatus = "passed";
     } else if (s === "rejected") {
       smtpStatus = "failed";
-    } else if (s === "unavailable" || backendResult.reason_code === "SMTP_UNAVAILABLE") {
+    } else if (s === "unavailable" || reason_code === "SMTP_UNAVAILABLE") {
       smtpStatus = "unavailable";
+    } else if (s === "timeout" || s === "inconclusive" || s === "error") {
+      smtpStatus = "inconclusive";
     } else {
       smtpStatus = "inconclusive";
     }
+  } else if (safeChecksRun.length > 0 && !safeChecksRun.includes("smtp")) {
+    smtpStatus = "skipped";
+  } else {
+    smtpStatus = "unavailable";
   }
 
   // 5. Construct granular pipeline checks
@@ -134,7 +196,11 @@ export function mapBackendToDetailedResult(
       status: syntaxStatus,
       detail:
         syntax_evidence?.reason ??
-        (syntaxStatus === "passed" ? "Address format satisfies RFC specification." : "Syntax validation failed."),
+        (syntaxStatus === "passed"
+          ? "Address format satisfies RFC specification."
+          : syntaxStatus === "skipped"
+          ? "Syntax validation skipped."
+          : "Syntax validation failed or unavailable."),
     },
     {
       id: `chk-${idx}-2`,
@@ -143,7 +209,13 @@ export function mapBackendToDetailedResult(
       status: dnsStatus,
       detail:
         dns_evidence?.reason ??
-        (dnsStatus === "passed" ? "Domain resolves with active nameservers." : "DNS resolution failed or timed out."),
+        (dnsStatus === "passed"
+          ? "Domain resolves with active nameservers."
+          : dnsStatus === "inconclusive"
+          ? "DNS resolution timed out or nameserver returned SERVFAIL."
+          : dnsStatus === "skipped"
+          ? "DNS resolution skipped."
+          : "DNS domain resolution failed or unavailable."),
     },
     {
       id: `chk-${idx}-3`,
@@ -155,6 +227,10 @@ export function mapBackendToDetailedResult(
           ? "No MX record; fallback A/AAAA records act as implicit MX (RFC 5321 § 5.1)."
           : dns_evidence?.mx_hosts && dns_evidence.mx_hosts.length > 0
           ? `Authoritative MX host(s): ${dns_evidence.mx_hosts.join(", ")}`
+          : routingStatus === "inconclusive"
+          ? "Routing targets could not be determined due to DNS resolver timeout or failure."
+          : routingStatus === "skipped"
+          ? "Mail routing analysis skipped."
           : "No mail routing destination found.",
     },
     {
@@ -168,25 +244,27 @@ export function mapBackendToDetailedResult(
           ? "SMTP verification was not enabled for this request."
           : smtpStatus === "unavailable"
           ? "SMTP server unreachable or outbound port 25 blocked."
+          : smtpStatus === "inconclusive"
+          ? "SMTP evaluation inconclusive."
           : "SMTP handshake evaluation completed."),
     },
   ];
 
   return {
-    id: `res-${idx}-${Date.now()}`,
+    id: `res-${idx}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     address,
     originalInput: original_input ?? address,
-    normalizedAddress: normalized_address,
+    normalizedAddress: normalized_address ?? null,
     verdict,
-    reason: explanation || evidence[0] || "Analysis complete.",
+    reason: explanation || safeEvidence[0] || "Analysis complete.",
     reasonCode: reason_code,
     syntaxStatus,
     dnsStatus,
     routingStatus,
     smtpStatus,
     checks,
-    evidence,
-    limitations,
+    evidence: safeEvidence,
+    limitations: safeLimitations,
     isFixture: false,
     analysedAt: analysed_at ?? new Date().toISOString(),
   };

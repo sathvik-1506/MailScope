@@ -11,6 +11,8 @@ import EmptyState from "./EmptyState";
 import ErrorState from "./ErrorState";
 import NoResultsState from "./NoResultsState";
 
+import { filterResults } from "../../utils/filterResults";
+
 interface ResultsTableProps {
   results: DetailedAddressResult[];
   searchQuery: string;
@@ -50,31 +52,32 @@ export default function ResultsTable({
     );
   }
 
-  // 2. Empty state before any results are loaded
+  // 2. Explicit loading state while analyzing an initial/cleared batch
+  if (isLoading && results.length === 0) {
+    return (
+      <div className="rounded-xl border border-border-default bg-surface-secondary p-12 text-center shadow-card">
+        <div className="flex flex-col items-center justify-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-400 border-t-transparent" />
+          <p className="text-sm font-medium text-text-primary">
+            Analyzing address batch...
+          </p>
+          <p className="text-xs text-text-muted">
+            Executing RFC syntax rules, live DNS MX routing, and non-disruptive SMTP signals.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Empty state before any results are loaded
   if (results.length === 0 && !isLoading) {
     return <EmptyState onLoadSample={onLoadSample} />;
   }
 
-  // 3. Filtering & Searching
-  const filtered = results.filter((r) => {
-    // Verdict filter
-    if (selectedVerdict !== "all" && r.verdict !== selectedVerdict) {
-      return false;
-    }
-    // Search query
-    if (searchQuery.trim().length > 0) {
-      const q = searchQuery.toLowerCase();
-      const matchAddress = r.address.toLowerCase().includes(q);
-      const matchReason = r.reason.toLowerCase().includes(q);
-      const matchEvidence = r.evidence.some((e) => e.toLowerCase().includes(q));
-      if (!matchAddress && !matchReason && !matchEvidence) {
-        return false;
-      }
-    }
-    return true;
-  });
+  // 4. Centralized Filtering & Searching
+  const filtered = filterResults(results, selectedVerdict, searchQuery);
 
-  // 4. Sorting
+  // 5. Sorting
   const sorted = [...filtered].sort((a, b) => {
     let cmp = 0;
     if (sortField === "address") {
@@ -85,7 +88,7 @@ export default function ResultsTable({
     return sortAsc ? cmp : -cmp;
   });
 
-  // 5. No results state when filtered out
+  // 6. No results state when filtered out
   if (sorted.length === 0 && !isLoading) {
     return (
       <NoResultsState

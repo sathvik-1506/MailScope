@@ -13,6 +13,7 @@ import { Footer } from "../components";
 import { analyzeAddresses, APIClientError } from "../services/api";
 import { SAMPLE_INPUT_BATCH, parseInputAddresses } from "../services/analyzerAdapter";
 import { downloadResultsCsv } from "../utils/csvExport";
+import { filterResults } from "../utils/filterResults";
 
 export default function AnalyzerPage() {
   // Input state
@@ -43,6 +44,9 @@ export default function AnalyzerPage() {
     lastRequestRef.current = { addresses, smtpEnabled };
     setIsLoading(true);
     setErrorMessage(null);
+    // Clear stale results immediately so they are never presented as a new completed analysis
+    setResults([]);
+    setSelectedRecord(null);
     setProgressPercent(20);
     setProgressStep(`Connecting to MailScope engine for ${addresses.length} addresses...`);
 
@@ -116,35 +120,14 @@ export default function AnalyzerPage() {
     }
   };
 
-  const handleExportCsv = () => {
-    const filtered = results.filter((r) => {
-      if (selectedVerdict !== "all" && r.verdict !== selectedVerdict) return false;
-      if (searchQuery.trim().length > 0) {
-        const q = searchQuery.toLowerCase();
-        return (
-          r.address.toLowerCase().includes(q) ||
-          r.reason.toLowerCase().includes(q) ||
-          r.evidence.some((e) => e.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
+  // Centralized filtered result set shared across table, summary counters, and CSV export
+  const filteredResults = filterResults(results, selectedVerdict, searchQuery);
 
-    downloadResultsCsv(filtered);
+  const handleExportCsv = () => {
+    downloadResultsCsv(filteredResults);
   };
 
-  const filteredCount = results.filter((r) => {
-    if (selectedVerdict !== "all" && r.verdict !== selectedVerdict) return false;
-    if (searchQuery.trim().length > 0) {
-      const q = searchQuery.toLowerCase();
-      return (
-        r.address.toLowerCase().includes(q) ||
-        r.reason.toLowerCase().includes(q) ||
-        r.evidence.some((e) => e.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  }).length;
+  const filteredCount = filteredResults.length;
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-primary text-text-primary">
