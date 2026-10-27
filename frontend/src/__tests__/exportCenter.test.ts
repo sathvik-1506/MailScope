@@ -219,8 +219,8 @@ describe("Export Center & CSV Generation Engine", () => {
     assert.ok(csv.includes("\"'\t\t=HYPERLINK(\"\"http://evil.com\"\")\""));
 
     // Also test pipe and percent triggers individually via escapeCsvField
-    assert.equal(escapeCsvField("|PIPE_INJECT"), `"\'|PIPE_INJECT"`);
-    assert.equal(escapeCsvField("%calc%"), `"\'%calc%"`);
+    assert.equal(escapeCsvField("|PIPE_INJECT"), `"'|PIPE_INJECT"`);
+    assert.equal(escapeCsvField("%calc%"), `"'%calc%"`);
   });
 
   // 8. Missing History Records & Unavailable Datasets
