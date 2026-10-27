@@ -23,8 +23,26 @@ from .services.schemas import (
     APIValidationError,
     mask_email_for_logging,
 )
+from .services.rate_limiter import get_rate_limiter, extract_client_ip
 
 logger = logging.getLogger("mailscope")
+
+
+def get_max_content_length() -> int:
+    """Returns the maximum permitted request body size in bytes."""
+    try:
+        return int(os.environ.get("MAX_CONTENT_LENGTH", 1 * 1024 * 1024))
+    except (ValueError, TypeError):
+        return 1 * 1024 * 1024
+
+
+def get_max_workers() -> int:
+    """Returns the bounded thread pool concurrency limit per batch (1 to 20)."""
+    try:
+        limit = int(os.environ.get("MAX_CONCURRENT_WORKERS", 10))
+        return max(1, min(limit, 20))
+    except (ValueError, TypeError):
+        return 10
 
 
 def verify_single_address(
@@ -64,18 +82,24 @@ def verify_single_address(
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB max request size
+    app.config["MAX_CONTENT_LENGTH"] = get_max_content_length()
 
     # Configure CORS: allow specific origin or comma-separated origins
     cors_origin_raw = os.environ.get("FRONTEND_ORIGIN") or os.environ.get("CORS_ORIGIN")
+    is_production = os.environ.get("FLASK_ENV") == "production"
+
     if cors_origin_raw:
         origins = [orig.strip() for orig in cors_origin_raw.split(",") if orig.strip()]
+    elif is_production:
+        # In production without an explicit origin, default to production domain
+        origins = ["https://mailscope.onrender.com"]
+        logger.warning("FRONTEND_ORIGIN not set in production; defaulted to https://mailscope.onrender.com")
     else:
-        origins = ["http://localhost:5173"]
+        origins = ["http://localhost:5173", "http://localhost:3000"]
     CORS(app, origins=origins)
 
     # ------------------------------------------------------------------
-    # Error Handlers
+    # Error Handlers (Redacted to avoid disclosing server internals)
     # ------------------------------------------------------------------
     @app.errorhandler(APIValidationError)
     def handle_validation_error(exc: APIValidationError):
@@ -83,7 +107,8 @@ def create_app() -> Flask:
 
     @app.errorhandler(400)
     def handle_bad_request(exc: Any):
-        return jsonify({"error": "Bad Request", "code": "BAD_REQUEST", "details": str(exc)}), 400
+        # Do not expose internal python exception details to the public API
+        return jsonify({"error": "Bad Request. Malformed or invalid request payload.", "code": "BAD_REQUEST"}), 400
 
     @app.errorhandler(404)
     def handle_not_found(exc: Any):
@@ -95,11 +120,18 @@ def create_app() -> Flask:
 
     @app.errorhandler(413)
     def handle_payload_too_large(exc: Any):
-        return jsonify({"error": "Payload exceeds batch size limits", "code": "BATCH_SIZE_EXCEEDED"}), 413
+        return jsonify({"error": "Payload exceeds maximum permitted size", "code": "BATCH_SIZE_EXCEEDED"}), 413
 
     @app.errorhandler(415)
     def handle_unsupported_media_type(exc: Any):
         return jsonify({"error": "Request content-type must be application/json", "code": "UNSUPPORTED_MEDIA_TYPE"}), 415
+
+    @app.errorhandler(429)
+    def handle_rate_limit(exc: Any):
+        return jsonify({
+            "error": "Rate limit exceeded. Please wait before submitting additional verification requests.",
+            "code": "RATE_LIMIT_EXCEEDED",
+        }), 429
 
     @app.errorhandler(500)
     def handle_internal_error(exc: Any):
@@ -131,6 +163,22 @@ def create_app() -> Flask:
     # Email Deliverability Analysis Endpoint
     # ------------------------------------------------------------------
     def _handle_analyze():
+        # 1. Rate Limiting Check
+        client_ip = extract_client_ip(request)
+        is_limited, retry_after, remaining = get_rate_limiter().check(client_ip)
+        if is_limited:
+            resp = jsonify({
+                "error": "Rate limit exceeded. Please wait before submitting additional verification requests.",
+                "code": "RATE_LIMIT_EXCEEDED",
+                "retry_after": retry_after,
+            })
+            resp.status_code = 429
+            resp.headers["Retry-After"] = str(retry_after)
+            resp.headers["X-RateLimit-Limit"] = str(get_rate_limiter().get_limit())
+            resp.headers["X-RateLimit-Remaining"] = "0"
+            return resp
+
+        # 2. Content-Type Verification
         if not request.is_json and request.content_length and request.content_length > 0:
             return jsonify({
                 "error": "Request content-type must be application/json",
@@ -145,9 +193,11 @@ def create_app() -> Flask:
         address_cache: dict[str, ClassificationResult] = {}
         cache_lock = threading.Lock()
 
+        # Privacy-safe logging: NEVER log full email addresses
+        first_masked = mask_email_for_logging(validated.addresses[0]) if validated.addresses else "none"
         logger.info(
             f"Analyzing batch of {len(validated.addresses)} addresses "
-            f"(smtp_enabled={validated.smtp_enabled}, first_masked={mask_email_for_logging(validated.addresses[0])})"
+            f"(smtp_enabled={validated.smtp_enabled}, first_masked={first_masked})"
         )
 
         def _process_address(addr: str) -> dict[str, Any]:
@@ -189,8 +239,8 @@ def create_app() -> Flask:
                 address_cache[addr] = res
             return res.to_dict()
 
-        # Controlled concurrency bounded to at most 10 workers, preserving input order
-        max_workers = min(10, max(1, len(validated.addresses)))
+        # Controlled concurrency bounded per batch, preserving input order
+        max_workers = min(get_max_workers(), max(1, len(validated.addresses)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(_process_address, validated.addresses))
 

@@ -304,12 +304,45 @@ npm run build   # tsc -b && vite build (generates production bundle in dist/)
 
 ## 10. Security & Privacy Controls
 
-* **Zero Email Message Transmission**: MailScope never calls the SMTP `DATA` command and never sends email messages. Probes stop immediately after `RCPT TO` and issue `QUIT`.
-* **Server-Side Request Forgery (SSRF) Protection**: Target MX hosts are resolved and checked against `ipaddress.ip_address` to prevent probing of loopback (`127.0.0.1`, `::1`), private RFC 1918 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), or cloud metadata endpoints (`169.254.169.254`).
-* **Spreadsheet Formula Injection Defense (CWE-1236)**: Exported CSV cells matching `/^\s*[=+\-@\t\r|%]/` are automatically prepended with a single quote (`'`) to neutralize formula execution in Excel and Google Sheets.
-* **No Unnecessary Address Persistence**: Email addresses are processed purely in-memory during request execution and are never stored in a database or written to disk logs. In production logs, addresses are masked (`u***@example.com`).
-* **Strict Security Headers**: All API responses enforce `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Cache-Control: no-store, max-age=0`.
-* **Bounded Concurrency & Payload Limits**: Incoming requests are capped at `1 MB` (`MAX_CONTENT_LENGTH`) and concurrency is bounded to 10 worker threads per batch to prevent denial-of-service.
+### Privacy & Data Retention Guarantees
+* **Zero Address Persistence**: MailScope never persists submitted email addresses or verification results to a database, key-value store, or disk files. Address batches exist purely in ephemeral process memory during request execution and are deallocated immediately upon response transmission (0-second data retention).
+* **Privacy-Safe Application Logging**: MailScope application logs never record full email addresses. Only batch counts and a privacy-masked representation of the first address (e.g. `a***@example.com`) are logged for diagnostic observability.
+* **Hosting-Provider & Proxy Access Log Implications**:
+  * MailScope's application code does not log submitted email addresses.
+  * However, external infrastructure components—such as cloud hosting access logs (Render, AWS, DigitalOcean, Heroku), reverse proxies (Nginx, Traefik), and CDNs (Cloudflare)—customarily log client IP addresses, request timestamps, User-Agent headers, and request URLs (`/api/analyze`).
+  * MailScope deliberately accepts email addresses via the HTTP request body (`POST /api/analyze`) rather than URL query parameters to ensure email addresses are not captured in standard URL access logs.
+  * Operators deploying MailScope in production should configure their edge reverse proxies and WAFs to disable body logging and set appropriate log retention windows for IP address records.
+
+### Public API Abuse Controls & Rate Limiting Architecture
+* **Process-Local Sliding Window Rate Limiting**:
+  * Unauthenticated public APIs risk abuse from automated scrapers and denial-of-service attempts.
+  * MailScope includes an in-memory sliding-window client rate limiter (`backend/services/rate_limiter.py`) configured via `RATE_LIMIT_PER_MINUTE` (default: 60 requests/minute).
+  * Client IP addresses are extracted from `X-Forwarded-For` or `X-Real-IP` when behind a reverse proxy, falling back to `request.remote_addr`.
+  * **Multi-Worker Architectural Note**: The rate limiter operates in-memory to preserve MailScope's zero-external-dependency and zero-persistence privacy model. In multi-worker deployments (e.g. Gunicorn with multiple worker processes), each worker enforces limits independently. For example, 4 workers with a 60 req/min limit provide an aggregate ceiling of up to 240 req/min under uniform round-robin distribution. For strict global rate limiting across horizontal clusters, an external distributed Redis token-bucket should be deployed.
+* **Bounded Concurrency & Payload Limits**:
+  * Request payload size is strictly bounded by `MAX_CONTENT_LENGTH` (default: 1 MB, configurable via environment).
+  * Address batch size is capped by `MAX_BATCH_SIZE` (default: 100 addresses).
+  * Concurrency per batch is bounded by `MAX_CONCURRENT_WORKERS` (default: 10 threads, clamped between 1 and 20) to prevent thread exhaustion.
+
+### Network Destination & SSRF Defenses
+* **No Arbitrary User Destinations**: User input cannot be used to target arbitrary hostnames, URLs, or internal networks. All destination targets are discovered strictly from authoritative DNS records (MX, A, AAAA) returned for the validated domain.
+* **Server-Side Request Forgery (SSRF) & Anti-TOCTOU Protection**:
+  * Destination IP addresses are checked against prohibited subnets (`is_prohibited_ip`): loopback (`127.0.0.0/8`, `::1`), private RFC 1918 networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), link-local/cloud metadata (`169.254.169.254`), multicast, and reserved addresses.
+  * Direct IP socket connections eliminate Time-Of-Check to Time-Of-Use (TOCTOU) DNS rebinding attacks.
+  * Socket peer addresses are validated post-connect before any SMTP traffic is initiated.
+* **Safe SMTP Probing**: Probes issue `EHLO`, `MAIL FROM`, and `RCPT TO` only. The `DATA` command is never executed, and no email messages are ever transmitted. When SMTP probing is disabled (default), port 25 is never contacted.
+
+### Client-Side Security & Error Redaction
+* **Sanitized Error Responses**: API error responses never expose Python stack traces, exception classes, environment variables, or server file paths to clients.
+* **CORS Restrictions**: Cross-Origin Resource Sharing permits only configured frontend origins (`FRONTEND_ORIGIN`).
+* **Strict Security Headers**: Every HTTP response enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Cache-Control: no-store, max-age=0`.
+* **Spreadsheet Formula Injection Defense (CWE-1236)**: Exported CSV cells matching `=+\-@|%` or preceded by leading whitespace or control characters are automatically prepended with a single quote (`'`) to neutralize formula execution in Excel and Google Sheets.
+
+### Remaining Risks
+* While MailScope implements defense-in-depth protections, deploying any unauthenticated public API carries residual operational risks:
+  1. Distributed botnets utilizing rotating residential proxies can distribute requests across many IP addresses to bypass IP-based rate limiting.
+  2. Public SMTP probing from cloud provider IP ranges may lead to recipient mail servers temporarily greylisting or rate-limiting the MailScope host IP.
+  3. Reverse proxies that log full HTTP request bodies would inadvertently store email addresses in proxy access logs unless specifically configured to omit request bodies.
 
 ---
 

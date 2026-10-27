@@ -243,3 +243,147 @@ def test_cors_headers_strict_origin(client):
     response = client.get("/health", headers={"Origin": "http://localhost:5173"})
     assert response.headers.get("Access-Control-Allow-Origin") == "http://localhost:5173"
 
+
+def test_cors_disallowed_origin_rejected(client):
+    response = client.get("/health", headers={"Origin": "http://evil-attacker.example.com"})
+    # CORS origin must not be reflected or granted
+    assert response.headers.get("Access-Control-Allow-Origin") is None
+
+
+def test_oversized_request_body_rejection():
+    # Configure tiny MAX_CONTENT_LENGTH of 50 bytes
+    with patch.dict("os.environ", {"MAX_CONTENT_LENGTH": "50"}):
+        app = create_app()
+        app.config["TESTING"] = True
+        with app.test_client() as small_client:
+            huge_payload = {"addresses": ["long_address_exceeding_50_bytes_threshold@example.com"]}
+            response = small_client.post("/api/analyze", json=huge_payload)
+            assert response.status_code == 413
+            data = response.get_json()
+            assert data["code"] == "BATCH_SIZE_EXCEEDED" or data["code"] == "PAYLOAD_TOO_LARGE"
+
+
+def test_error_response_redaction_does_not_leak_internals(client):
+    # Trigger 400 Bad Request
+    response = client.post("/api/analyze", data="malformed{json", content_type="application/json")
+    assert response.status_code == 400
+    data = response.get_json()
+    assert "error" in data
+    # Must NOT disclose stack traces, Python classes, or internals
+    assert "Traceback" not in response.get_data(as_text=True)
+    assert "SyntaxError" not in response.get_data(as_text=True)
+    assert "File " not in response.get_data(as_text=True)
+
+
+@patch("backend.app.check_dns")
+def test_rate_limiting_enforcement(mock_check_dns, client):
+    mock_check_dns.return_value = DNSResult(
+        status=DNSStatus.HAS_MX,
+        domain="example.com",
+        mx_hosts=["mail.example.com"],
+        reason="Found MX",
+    )
+    from backend.services.rate_limiter import get_rate_limiter
+    limiter = get_rate_limiter()
+    limiter.reset()
+
+    # Limit to 2 requests per minute
+    with patch.dict("os.environ", {"RATE_LIMIT_PER_MINUTE": "2", "RATE_LIMIT_ENABLED": "true"}):
+        # 1st request -> OK
+        res1 = client.get("/health")  # health does not rate limit
+        res_api_1 = client.post(
+            "/api/analyze",
+            json={"addresses": ["user1@example.com"]},
+            headers={"X-Forwarded-For": "203.0.113.195"},
+        )
+        assert res_api_1.status_code == 200  # Accepted through rate limiter
+
+        # 2nd request -> OK
+        res_api_2 = client.post(
+            "/api/analyze",
+            json={"addresses": ["user2@example.com"]},
+            headers={"X-Forwarded-For": "203.0.113.195"},
+        )
+        assert res_api_2.status_code == 200
+
+        # 3rd request -> Rate limited (429)
+        res_api_3 = client.post(
+            "/api/analyze",
+            json={"addresses": ["user3@example.com"]},
+            headers={"X-Forwarded-For": "203.0.113.195"},
+        )
+        assert res_api_3.status_code == 429
+        data = res_api_3.get_json()
+        assert data["code"] == "RATE_LIMIT_EXCEEDED"
+        assert "Retry-After" in res_api_3.headers
+        assert int(res_api_3.headers["Retry-After"]) >= 1
+
+    limiter.reset()
+
+
+@patch("backend.app.check_dns")
+def test_rate_limiting_disabled_allows_traffic(mock_check_dns, client):
+    mock_check_dns.return_value = DNSResult(
+        status=DNSStatus.HAS_MX,
+        domain="example.com",
+        mx_hosts=["mail.example.com"],
+        reason="Found MX",
+    )
+    from backend.services.rate_limiter import get_rate_limiter
+    limiter = get_rate_limiter()
+    limiter.reset()
+
+    with patch.dict("os.environ", {"RATE_LIMIT_ENABLED": "false"}):
+        for _ in range(5):
+            res = client.post(
+                "/api/analyze",
+                json={"addresses": ["user@example.com"]},
+                headers={"X-Forwarded-For": "198.51.100.42"},
+            )
+            assert res.status_code == 200
+
+    limiter.reset()
+
+
+@patch("backend.app.check_dns")
+def test_smtp_disabled_by_default_mode(mock_check_dns, client):
+    mock_check_dns.return_value = DNSResult(
+        status=DNSStatus.HAS_MX,
+        domain="example.com",
+        mx_hosts=["mail.example.com"],
+        reason="Found MX",
+    )
+
+    # Calling without specifying smtp_enabled (defaults to False)
+    response = client.post("/api/analyze", json={"addresses": ["alice@example.com"]})
+    assert response.status_code == 200
+    data = response.get_json()
+    item = data["results"][0]
+
+    assert item["verdict"] == "unknown"
+    assert item["reason_code"] == "MAILBOX_UNCONFIRMED"
+    assert "smtp" in item["checks_skipped"]
+    assert item["smtp_evidence"]["status"] == "disabled"
+
+
+@patch("backend.app.check_dns")
+def test_logging_masks_full_submitted_addresses(mock_check_dns, client, caplog):
+    mock_check_dns.return_value = DNSResult(
+        status=DNSStatus.HAS_MX,
+        domain="example.com",
+        mx_hosts=["mail.example.com"],
+        reason="Found MX",
+    )
+
+    import logging
+    with caplog.at_level(logging.INFO, logger="mailscope"):
+        secret_address = "super_secret_employee_name_99@confidential.com"
+        client.post("/api/analyze", json={"addresses": [secret_address], "smtp_enabled": False})
+
+        logged_text = caplog.text
+        # Full address local-part MUST NOT be logged
+        assert secret_address not in logged_text
+        assert "super_secret_employee_name_99" not in logged_text
+        # Masked local-part MUST be present
+        assert "s***@confidential.com" in logged_text
+
