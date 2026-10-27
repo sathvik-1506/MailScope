@@ -275,7 +275,7 @@ Analyzes a batch of email addresses across the verification pipeline.
 ## 9. Automated Testing & Validation
 
 ### Backend Pytest Suite
-Runs 133 unit and integration tests covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, duplicate caching, concurrency order preservation, rate limiting, and HTTP error status codes:
+Runs 135 unit and integration tests covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, duplicate caching, concurrency order preservation, rate limiting, and HTTP error status codes:
 ```bash
 # From repository root
 pytest --cov=backend.services --cov=backend.app
@@ -284,7 +284,7 @@ pytest --cov=backend.services --cov=backend.app
 cd backend
 python -m pytest --cov=backend.services --cov=backend.app
 ```
-**Outcome**: 133 passed, 0 skipped, 0 failures, 86% coverage across core services.
+**Outcome**: 135 passed, 0 skipped, 0 failures, 86% coverage across core services.
 
 ### Frontend Test Suite
 Runs 29 unit tests across 5 suites verifying address parsing, RFC 4180 / CWE-1236 CSV formula injection defense, filter/search consistency, and typed API response mapping:
@@ -340,7 +340,7 @@ Automated CI is configured via `.github/workflows/ci.yml` running on pushes and 
 
 ### Client-Side Security & Error Redaction
 * **Sanitized Error Responses**: API error responses never expose Python stack traces, exception classes, environment variables, or server file paths to clients.
-* **CORS Restrictions**: Cross-Origin Resource Sharing permits only configured frontend origins (`FRONTEND_ORIGIN`).
+* **CORS Restrictions**: Cross-Origin Resource Sharing permits only configured frontend origins (`FRONTEND_ORIGIN`). In production, if `FRONTEND_ORIGIN` is unset, cross-origin browser requests fail closed.
 * **Strict Security Headers**: Every HTTP response enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Cache-Control: no-store, max-age=0`.
 * **Spreadsheet Formula Injection Defense (CWE-1236)**: Exported CSV cells matching `=+\-@|%` or preceded by leading whitespace or control characters are automatically prepended with a single quote (`'`) to neutralize formula execution in Excel and Google Sheets.
 
@@ -361,10 +361,12 @@ Render supports both Python Web Services and Static Sites with automated route r
 1. Push this repository to GitHub or GitLab.
 2. Log into [Render Dashboard](https://dashboard.render.com/) and click **New + > Blueprint**.
 3. Select the repository. Render will automatically detect `render.yaml` and provision:
-   * **`mailscope-api`**: Python Web Service running Gunicorn.
-   * **`mailscope-frontend`**: Static Site with SPA rewrite `/* -> /index.html`.
-4. Update `FRONTEND_ORIGIN` on the backend with your frontend's assigned Render URL.
-5. Update `VITE_API_BASE_URL` on the frontend with your backend's assigned Render URL and trigger a redeploy.
+   * **`mailscope-api`**: Python Web Service running Gunicorn on the `starter` tier ($7/mo, or `free` if available on your account).
+   * **`mailscope-frontend`**: Static Site with SPA wildcard rewrite `/* -> /index.html`.
+4. During blueprint creation (or in the service dashboard), Render will prompt for the environment variables marked `sync: false`:
+   * Set `FRONTEND_ORIGIN` on `mailscope-api` to your frontend's assigned URL (e.g. `https://<frontend-subdomain>.onrender.com`).
+   * Set `VITE_API_BASE_URL` on `mailscope-frontend` to your backend's assigned URL (e.g. `https://<api-subdomain>.onrender.com`).
+5. Trigger a deploy on both services.
 
 ### Option B: Frontend on Vercel / Netlify + Backend on Railway / Fly.io
 

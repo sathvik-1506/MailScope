@@ -91,9 +91,12 @@ def create_app() -> Flask:
     if cors_origin_raw:
         origins = [orig.strip() for orig in cors_origin_raw.split(",") if orig.strip()]
     elif is_production:
-        # In production without an explicit origin, default to production domain
-        origins = ["https://mailscope.onrender.com"]
-        logger.warning("FRONTEND_ORIGIN not set in production; defaulted to https://mailscope.onrender.com")
+        # In production, require explicit FRONTEND_ORIGIN; fail closed if unset
+        origins = []
+        logger.warning(
+            "FRONTEND_ORIGIN is not configured in production. "
+            "Browser cross-origin requests will be rejected until FRONTEND_ORIGIN is set."
+        )
     else:
         origins = ["http://localhost:5173", "http://localhost:3000"]
     CORS(app, origins=origins)

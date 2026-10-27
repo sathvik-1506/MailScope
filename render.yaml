@@ -6,7 +6,9 @@ services:
     name: mailscope-api
     runtime: python
     region: oregon
-    plan: standard
+    # 'starter' ($7/mo) is Render's lowest-cost paid tier with continuous uptime.
+    # If a non-expiring free tier is available on your account, 'free' may be substituted.
+    plan: starter
     buildCommand: pip install -r backend/requirements.txt
     startCommand: gunicorn -w 4 -k gthread --threads 8 --bind 0.0.0.0:$PORT "backend.app:create_app()"
     healthCheckPath: /health
@@ -16,7 +18,8 @@ services:
       - key: MAX_BATCH_SIZE
         value: 100
       - key: FRONTEND_ORIGIN
-        value: https://mailscope.onrender.com
+        # Managed via Render Dashboard to match your frontend URL (avoids hardcoded origins)
+        sync: false
 
   # ----------------------------------------------------------------------------
   # Frontend SPA Service (Static Site)
@@ -33,4 +36,5 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://mailscope-api.onrender.com
+        # Set at build-time to match your deployed mailscope-api service URL
+        sync: false

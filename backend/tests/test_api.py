@@ -250,6 +250,28 @@ def test_cors_disallowed_origin_rejected(client):
     assert response.headers.get("Access-Control-Allow-Origin") is None
 
 
+def test_cors_production_configured_origin_allowed():
+    with patch.dict("os.environ", {"FLASK_ENV": "production", "FRONTEND_ORIGIN": "https://myapp.vercel.app"}):
+        prod_app = create_app()
+        prod_app.config["TESTING"] = True
+        with prod_app.test_client() as prod_client:
+            resp = prod_client.get("/health", headers={"Origin": "https://myapp.vercel.app"})
+            assert resp.headers.get("Access-Control-Allow-Origin") == "https://myapp.vercel.app"
+
+            resp_evil = prod_client.get("/health", headers={"Origin": "https://evil.attacker.com"})
+            assert resp_evil.headers.get("Access-Control-Allow-Origin") is None
+
+
+def test_cors_production_unset_origin_blocks_cross_origin():
+    # When FRONTEND_ORIGIN is unset in production, cross-origin requests must be blocked (fail-closed)
+    with patch.dict("os.environ", {"FLASK_ENV": "production"}, clear=True):
+        prod_app = create_app()
+        prod_app.config["TESTING"] = True
+        with prod_app.test_client() as prod_client:
+            resp = prod_client.get("/health", headers={"Origin": "https://random-site.com"})
+            assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
 def test_oversized_request_body_rejection():
     # Configure tiny MAX_CONTENT_LENGTH of 50 bytes
     with patch.dict("os.environ", {"MAX_CONTENT_LENGTH": "50"}):
