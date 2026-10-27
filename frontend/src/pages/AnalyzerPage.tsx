@@ -10,6 +10,7 @@ import {
   MethodologyModal,
 } from "../components/analyzer";
 import { Footer } from "../components";
+import SettingsModal from "../components/SettingsModal";
 import { analyzeAddresses, APIClientError } from "../services/api";
 import { SAMPLE_INPUT_BATCH, parseInputAddresses } from "../services/analyzerAdapter";
 import { downloadResultsCsv } from "../utils/csvExport";
@@ -37,6 +38,7 @@ export default function AnalyzerPage() {
   // Drawer & Modal state
   const [selectedRecord, setSelectedRecord] = useState<DetailedAddressResult | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Core Real API Submission Handler
   const handleAnalyze = async (addresses: string[], smtpEnabled: boolean) => {
@@ -133,7 +135,10 @@ export default function AnalyzerPage() {
   return (
     <div className="min-h-screen flex flex-col bg-surface-primary text-text-primary">
       {/* 1. Header with logo, navigation, and return home */}
-      <AnalyzerHeader onOpenHelp={() => setIsHelpOpen(true)} />
+      <AnalyzerHeader
+        onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
 
       {/* Main Container */}
       <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">
@@ -221,6 +226,12 @@ export default function AnalyzerPage() {
       <MethodologyModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
+      />
+
+      {/* Workspace & Appearance Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
 
       {/* 14. Professional Footer */}

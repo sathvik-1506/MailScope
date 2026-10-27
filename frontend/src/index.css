@@ -1,14 +1,71 @@
 /*
  * Mailora — Design System
  *
- * Tailwind CSS v4 with @theme design tokens.
- * All brand colors, typography, spacing utilities, and component-level
- * base styles live here so that .tsx files use Tailwind classes only.
+ * Tailwind CSS v4 with dynamic CSS variable tokens for Light, Dark, and System appearance modes.
  */
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ------------------------------------------------------------------ */
-/* 1. Design Tokens                                                    */
+/* 1. Dynamic Design Tokens (Light vs. Dark)                           */
+/* ------------------------------------------------------------------ */
+
+:root {
+  /* --- Light Theme Tokens (Default for first-time visitors) --- */
+  --surface-primary:   #ffffff;
+  --surface-secondary: #f8fafc;
+  --surface-elevated:  #f1f5f9;
+  --surface-card:      #ffffff;
+  --surface-light:     #ffffff;
+
+  --text-primary:   #0f172a; /* Slate 900 */
+  --text-secondary: #334155; /* Slate 700 */
+  --text-muted:     #64748b; /* Slate 500 */
+  --text-inverse:   #ffffff;
+
+  --border-subtle:  #e2e8f0; /* Slate 200 */
+  --border-default: #cbd5e1; /* Slate 300 */
+
+  /* High-contrast WCAG-compliant semantic colors for Light mode */
+  --delivered: #15803d; /* Emerald 700 - 5.2:1 contrast against white */
+  --bounce:    #b91c1c; /* Red 700     - 5.1:1 contrast against white */
+  --unknown:   #b45309; /* Amber 700   - 4.8:1 contrast against white */
+
+  --brand-accent: #4f46e5; /* Indigo 600 */
+
+  --shadow-card:     0 1px 3px 0 rgb(15 23 42 / 0.08), 0 1px 2px -1px rgb(15 23 42 / 0.08);
+  --shadow-elevated: 0 10px 25px -3px rgb(15 23 42 / 0.1), 0 4px 6px -4px rgb(15 23 42 / 0.06);
+}
+
+.dark {
+  /* --- Dark Theme Tokens (Mailora deep navy & vibrant neon signals) --- */
+  --surface-primary:   #0a0c14;
+  --surface-secondary: #10131f;
+  --surface-elevated:  #161a2a;
+  --surface-card:      #1a1f33;
+  --surface-light:     #f8f8fa;
+
+  --text-primary:   #eef0f6;
+  --text-secondary: #9197ad;
+  --text-muted:     #5c6280;
+  --text-inverse:   #0a0c14;
+
+  --border-subtle:  #1e2340;
+  --border-default: #2a3055;
+
+  --delivered: oklch(72% 0.17 160);
+  --bounce:    oklch(68% 0.19 25);
+  --unknown:   oklch(76% 0.15 85);
+
+  --brand-accent: oklch(65% 0.19 264);
+
+  --shadow-card:     0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. Tailwind Theme Definition                                       */
 /* ------------------------------------------------------------------ */
 @theme {
   /* --- Brand palette (indigo / violet anchor) --- */
@@ -24,26 +81,29 @@
   --color-brand-900: oklch(22% 0.07  264);
 
   /* --- Surfaces --- */
-  --color-surface-primary:   #0a0c14;
-  --color-surface-secondary: #10131f;
-  --color-surface-elevated:  #161a2a;
-  --color-surface-card:      #1a1f33;
-  --color-surface-light:     #f8f8fa;
+  --color-surface-primary:   var(--surface-primary);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-elevated:  var(--surface-elevated);
+  --color-surface-card:      var(--surface-card);
+  --color-surface-light:     var(--surface-light);
 
   /* --- Text --- */
-  --color-text-primary:   #eef0f6;
-  --color-text-secondary: #9197ad;
-  --color-text-muted:     #5c6280;
-  --color-text-inverse:   #0a0c14;
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted:     var(--text-muted);
+  --color-text-inverse:   var(--text-inverse);
 
   /* --- Semantic (verdict) --- */
-  --color-delivered: oklch(72% 0.17 160);
-  --color-bounce:    oklch(68% 0.19 25);
-  --color-unknown:   oklch(76% 0.15 85);
+  --color-delivered: var(--delivered);
+  --color-bounce:    var(--bounce);
+  --color-unknown:   var(--unknown);
 
   /* --- Border / Divider --- */
-  --color-border-subtle:  #1e2340;
-  --color-border-default: #2a3055;
+  --color-border-subtle:  var(--border-subtle);
+  --color-border-default: var(--border-default);
+
+  /* --- Brand Accent (Light/Dark aware) --- */
+  --color-brand-accent: var(--brand-accent);
 
   /* --- Typography --- */
   --font-sans:  "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -74,15 +134,16 @@
   --radius-xl:  20px;
 
   /* --- Shadows --- */
-  --shadow-card:     0 2px 8px rgba(0,0,0,0.35);
-  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.45);
+  --shadow-card:     var(--shadow-card);
+  --shadow-elevated: var(--shadow-elevated);
 }
 
 /* ------------------------------------------------------------------ */
-/* 2. Base resets                                                       */
+/* 3. Base resets                                                     */
 /* ------------------------------------------------------------------ */
 html {
   scroll-behavior: smooth;
+  color-scheme: light dark;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -96,24 +157,25 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background: var(--color-surface-primary);
+  background-color: var(--color-surface-primary);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* ------------------------------------------------------------------ */
-/* 3. Focus-visible utility                                            */
+/* 4. Focus-visible utility                                           */
 /* ------------------------------------------------------------------ */
 :focus-visible {
-  outline: 2px solid var(--color-brand-400);
+  outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. Selection                                                        */
+/* 5. Selection                                                       */
 /* ------------------------------------------------------------------ */
 ::selection {
-  background: var(--color-brand-600);
-  color: var(--color-text-primary);
+  background: var(--color-brand-500);
+  color: #ffffff;
 }

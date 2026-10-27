@@ -14,7 +14,7 @@ export default function ErrorState({
 }: ErrorStateProps) {
   return (
     <div className="rounded-xl border border-rose-500/30 bg-surface-secondary p-8 text-center sm:p-12 shadow-card">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-500/30 bg-rose-500/10 text-rose-400 shadow-sm mb-4">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 shadow-sm mb-4">
         <AlertCircle className="h-7 w-7" aria-hidden="true" />
       </div>
 
@@ -28,7 +28,7 @@ export default function ErrorState({
         </p>
 
         {/* Explicit clarity: This is NOT an email bounce verdict */}
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-300/90 text-left">
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-300 text-left">
           <strong className="font-semibold block mb-0.5">Important:</strong>
           This is an application or network connectivity error, not an email-verification outcome. No addresses were marked as bounces due to this connection issue.
         </div>

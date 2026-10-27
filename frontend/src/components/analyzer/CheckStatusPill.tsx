@@ -25,12 +25,12 @@ export default function CheckStatusPill({ status, compact = false }: CheckStatus
       <span
         className={`h-1.5 w-1.5 rounded-full ${
           status === "passed"
-            ? "bg-emerald-400"
+            ? "bg-emerald-600 dark:bg-emerald-400"
             : status === "failed"
-            ? "bg-rose-400"
+            ? "bg-rose-600 dark:bg-rose-400"
             : status === "inconclusive"
-            ? "bg-amber-400"
-            : "bg-zinc-400"
+            ? "bg-amber-600 dark:bg-amber-400"
+            : "bg-zinc-500 dark:bg-zinc-400"
         }`}
         aria-hidden="true"
       />

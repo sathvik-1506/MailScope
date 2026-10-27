@@ -176,8 +176,8 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
           {/* Known Limitations */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="h-4 w-4 text-amber-400" aria-hidden="true" />
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-400/90">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-400">
                 Known Limitations & Caveats
               </h3>
             </div>
@@ -186,7 +186,7 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
               <ul className="space-y-2 text-xs leading-relaxed text-text-secondary">
                 {result.limitations.map((lim, idx) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="text-amber-400 font-mono mt-0.5">›</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-mono mt-0.5">›</span>
                     <span>{lim}</span>
                   </li>
                 ))}
