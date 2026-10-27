@@ -37,6 +37,7 @@ def check_syntax(address: str) -> SyntaxResult:
         info = validate_email(address, check_deliverability=False)
         # Extract ASCII domain if available, fallback to domain
         domain = getattr(info, "ascii_domain", None) or getattr(info, "domain", None)
+        clean_domain = domain.rstrip(".") if domain else None
         local_part = getattr(info, "local_part", None)
         return SyntaxResult(
             valid=True,
@@ -44,7 +45,7 @@ def check_syntax(address: str) -> SyntaxResult:
             original=address,
             reason="Address passes RFC 5321/5322 syntax checks.",
             local_part=local_part,
-            domain=domain,
+            domain=clean_domain,
         )
     except EmailNotValidError as exc:
         return SyntaxResult(

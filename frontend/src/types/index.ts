@@ -47,10 +47,15 @@ export interface SyntaxEvidence {
 
 export interface DNSEvidence {
   status: string;
+  state?: "passed" | "failed" | "inconclusive" | "unavailable" | "skipped";
   domain?: string;
   mx_hosts?: string[];
+  invalid_mx_hosts?: string[];
+  unresolvable_mx_hosts?: string[];
   has_implicit_mx?: boolean;
   is_nxdomain?: boolean;
+  is_nodata?: boolean;
+  is_null_mx?: boolean;
   reason: string;
 }
 

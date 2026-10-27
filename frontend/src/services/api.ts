@@ -71,21 +71,24 @@ export function mapBackendToDetailedResult(
   }
 
   // 2. Determine DNS resolution status
+  // 2. Determine DNS resolution status
   let dnsStatus: CheckStatus = "passed";
-  if (checks_skipped.includes("dns")) {
-    dnsStatus = "skipped";
-  } else if (!checks_run.includes("dns")) {
+  if (checks_skipped.includes("dns") || !checks_run.includes("dns")) {
     dnsStatus = "skipped";
   } else if (dns_evidence) {
-    const s = dns_evidence.status;
-    if (s === "has_mx" || s === "has_a") {
-      dnsStatus = "passed";
-    } else if (s === "no_records") {
-      dnsStatus = "failed";
-    } else if (s === "timeout" || s === "servfail") {
-      dnsStatus = "inconclusive";
+    if (dns_evidence.state && ["passed", "failed", "inconclusive", "unavailable", "skipped"].includes(dns_evidence.state)) {
+      dnsStatus = dns_evidence.state as CheckStatus;
     } else {
-      dnsStatus = "failed";
+      const s = dns_evidence.status;
+      if (s === "has_mx" || s === "has_a") {
+        dnsStatus = "passed";
+      } else if (s === "no_records") {
+        dnsStatus = "failed";
+      } else if (s === "timeout" || s === "servfail" || s === "error") {
+        dnsStatus = "inconclusive";
+      } else {
+        dnsStatus = "failed";
+      }
     }
   }
 

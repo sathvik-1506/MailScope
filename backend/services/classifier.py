@@ -222,10 +222,15 @@ def classify(
     checks_run.append("dns")
     dns_evidence = {
         "status": dns.status.value if hasattr(dns.status, "value") else str(dns.status),
+        "state": getattr(dns, "state", "passed" if dns.status in (DNSStatus.HAS_MX, DNSStatus.HAS_A) else "failed" if dns.status == DNSStatus.NO_RECORDS else "inconclusive"),
         "domain": dns.domain,
         "mx_hosts": dns.mx_hosts,
+        "invalid_mx_hosts": getattr(dns, "invalid_mx_hosts", []),
+        "unresolvable_mx_hosts": getattr(dns, "unresolvable_mx_hosts", []),
         "has_implicit_mx": getattr(dns, "has_implicit_mx", False),
         "is_nxdomain": getattr(dns, "is_nxdomain", False),
+        "is_nodata": getattr(dns, "is_nodata", False),
+        "is_null_mx": getattr(dns, "is_null_mx", False),
         "reason": dns.reason,
     }
 
@@ -275,6 +280,14 @@ def classify(
             reason_code = ReasonCode.NO_MAIL_ROUTING.value
             explanation = f"Domain '{dns.domain}' publishes a Null MX record (RFC 7505) explicitly declaring it does not accept email."
             limitations.append("Domains publishing Null MX records reject all inbound email by design.")
+        elif getattr(dns, "invalid_mx_hosts", None) or getattr(dns, "unresolvable_mx_hosts", None):
+            reason_code = ReasonCode.NO_MAIL_ROUTING.value
+            explanation = f"Domain '{dns.domain}' publishes MX records, but all routing targets are invalid or unresolvable."
+            limitations.append("Mail transfer agents cannot route email to unresolvable or invalid destination hosts.")
+        elif getattr(dns, "is_nodata", False):
+            reason_code = ReasonCode.NO_MAIL_ROUTING.value
+            explanation = f"Domain '{dns.domain}' exists in DNS (NODATA on MX), but has no MX or fallback A/AAAA records."
+            limitations.append("Domains without mail routing targets cannot receive email under RFC 5321.")
         else:
             reason_code = ReasonCode.NO_MAIL_ROUTING.value
             explanation = f"No mail routing targets (MX or fallback A/AAAA) found for domain '{dns.domain}'."
