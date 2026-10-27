@@ -1,4 +1,5 @@
 import type { DetailedAddressResult } from "../types";
+import { BRAND } from "../constants/brand";
 
 /**
  * Escapes a cell value for CSV output according to RFC 4180 while
@@ -92,7 +93,7 @@ export function generateResultsCsv(results: DetailedAddressResult[]): string {
  */
 export function downloadResultsCsv(
   results: DetailedAddressResult[],
-  filenamePrefix = "mailscope_analysis"
+  filenamePrefix = BRAND.csvPrefix
 ): void {
   const csvContent = generateResultsCsv(results);
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });

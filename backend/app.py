@@ -1,5 +1,5 @@
 """
-MailScope – Flask application entry point and verification API.
+Mailora – Flask application entry point and verification API.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from .services.schemas import (
 )
 from .services.rate_limiter import get_rate_limiter, extract_client_ip
 
-logger = logging.getLogger("mailscope")
+logger = logging.getLogger("mailora")
 
 
 def get_max_content_length() -> int:
@@ -158,7 +158,7 @@ def create_app() -> Flask:
     def health():
         return jsonify({
             "status": "ok",
-            "service": "mailscope-backend",
+            "service": "mailora-backend",
             "version": "1.0.0",
         })
 

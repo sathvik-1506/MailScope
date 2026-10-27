@@ -1,5 +1,5 @@
 """
-MailScope – In-Memory Process-Local Client Rate Limiter.
+Mailora – In-Memory Process-Local Client Rate Limiter.
 
 =============================================================================
 SECURITY & DEPLOYMENT ARCHITECTURE NOTE
@@ -7,7 +7,7 @@ SECURITY & DEPLOYMENT ARCHITECTURE NOTE
 This rate limiter operates in-memory on a per-process sliding window:
 - It tracks client request timestamps using a thread-safe sliding window (60s).
 - It does NOT require or connect to an external Redis instance or database,
-  maintaining MailScope's zero-storage privacy guarantee.
+  maintaining Mailora's zero-storage privacy guarantee.
 - In multi-worker deployments (e.g. Gunicorn with 4 workers), each worker
   process enforces limits independently. For example, a limit of 60 req/min
   per worker provides an effective aggregate ceiling of up to 240 req/min

@@ -3,7 +3,7 @@ services:
   # Backend API Service (Flask + Gunicorn)
   # ----------------------------------------------------------------------------
   - type: web
-    name: mailscope-api
+    name: mailora-api
     runtime: python
     region: oregon
     # 'starter' ($7/mo) is Render's lowest-cost paid tier with continuous uptime.
@@ -25,7 +25,7 @@ services:
   # Frontend SPA Service (Static Site)
   # ----------------------------------------------------------------------------
   - type: web
-    name: mailscope-frontend
+    name: mailora-frontend
     runtime: static
     region: oregon
     buildCommand: cd frontend && npm install && npm run build
@@ -34,7 +34,7 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
-    envVars:
-      - key: VITE_API_BASE_URL
-        # Set at build-time to match your deployed mailscope-api service URL
+      envVars:
+        - key: VITE_API_BASE_URL
+        # Set at build-time to match your deployed mailora-api service URL
         sync: false

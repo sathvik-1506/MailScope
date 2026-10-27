@@ -12,6 +12,7 @@ import type { DetailedAddressResult } from "../../types";
 import { VERDICT_META } from "../../types";
 import Badge from "../Badge";
 import CheckStatusPill from "./CheckStatusPill";
+import { BRAND } from "../../constants/brand";
 
 interface EvidenceDrawerProps {
   result: DetailedAddressResult | null;
@@ -197,7 +198,7 @@ export default function EvidenceDrawer({ result, onClose }: EvidenceDrawerProps)
           <div className="rounded-lg border border-border-subtle bg-surface-elevated/40 p-4 text-xs text-text-muted flex items-start gap-3">
             <ShieldAlert className="h-4 w-4 shrink-0 text-text-secondary mt-0.5" aria-hidden="true" />
             <p className="leading-relaxed">
-              MailScope tests technical evidence without sending email. SMTP acceptance indicates the server acknowledged the recipient during the handshake, but final delivery can still depend on internal mailbox policies or greylisting filters.
+              {BRAND.name} tests technical evidence without sending email. SMTP acceptance indicates the server acknowledged the recipient during the handshake, but final delivery can still depend on internal mailbox policies or greylisting filters.
             </p>
           </div>
         </div>

@@ -1,9 +1,10 @@
 /**
- * Centralized typed API client for the MailScope backend service.
+ * Centralized typed API client for the Mailora backend service.
  *
  * Configured via VITE_API_BASE_URL (or VITE_API_URL fallback).
  */
 
+import { BRAND } from "../constants/brand";
 import type {
   AnalysisRequest,
   BackendAddressResult,
@@ -286,7 +287,7 @@ export async function healthCheck(): Promise<{ status: string; service: string }
     if (err instanceof APIClientError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
     throw new APIClientError(
-      `Cannot connect to MailScope API at ${API_BASE_URL} (${msg})`,
+      `Cannot connect to ${BRAND.name} API at ${API_BASE_URL} (${msg})`,
       undefined,
       "NETWORK_ERROR",
       true
@@ -333,7 +334,7 @@ export async function analyzeAddresses(
     }
     const msg = err instanceof Error ? err.message : String(err);
     throw new APIClientError(
-      `Could not establish connection to MailScope backend service at ${API_BASE_URL}. Please ensure the backend is running. (${msg})`,
+      `Could not establish connection to ${BRAND.name} backend service at ${API_BASE_URL}. Please ensure the backend is running. (${msg})`,
       undefined,
       "CONNECTION_REFUSED",
       true

@@ -1,4 +1,4 @@
-# MailScope Backend – runtime dependencies
+# Mailora Backend – runtime dependencies
 # Pin minor versions; patch versions float to get security fixes.
 
 Flask>=3.1,<4

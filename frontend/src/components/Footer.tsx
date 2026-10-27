@@ -1,4 +1,5 @@
 import Logo from "./Logo";
+import { BRAND } from "../constants/brand";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -24,7 +25,7 @@ export default function Footer() {
         </nav>
 
         <p className="text-xs text-text-muted">
-          &copy; {CURRENT_YEAR} MailScope. Built for transparency.
+          &copy; {CURRENT_YEAR} {BRAND.copyright}
         </p>
       </div>
     </footer>

@@ -171,7 +171,7 @@ export default function ProductPreview() {
           <span className="h-2.5 w-2.5 rounded-full bg-unknown/70" />
           <span className="h-2.5 w-2.5 rounded-full bg-delivered/70" />
           <span className="ml-2 text-xs text-text-muted font-mono">
-            mailscope analysis
+            mailora analysis
           </span>
         </div>
 

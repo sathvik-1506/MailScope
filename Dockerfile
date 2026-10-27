@@ -22,8 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend ./backend
 
 # Non-root security user
-RUN addgroup --system mailscope && adduser --system --group mailscope
-USER mailscope
+RUN addgroup --system mailora && adduser --system --group mailora
+USER mailora
 
 EXPOSE 5000
 

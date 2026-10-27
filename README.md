@@ -1,6 +1,8 @@
-# MailScope – Explainable Email Deliverability Intelligence
+# Mailora – Explainable Email Deliverability Intelligence
 
-> **MailScope** is an explainable email deliverability intelligence platform that analyzes technical email routing evidence and provides transparent, auditable classifications for email addresses without ever sending messages.
+> **"Every Address Has a Story. Discover the Signals."**
+>
+> **Mailora** is an explainable email deliverability intelligence platform grounded in evidence. It analyzes technical mail routing, DNS configurations, and recipient signals to provide transparent, auditable classifications for email addresses without ever sending messages.
 
 ---
 
@@ -11,10 +13,10 @@ Traditional email validation tools operate as black boxes, often returning binar
 * Many enterprise and privacy-oriented mail servers deploy **greylisting**, **silent acceptance**, or **catch-all configurations** that accept all recipients during the initial SMTP handshake.
 * Outbound SMTP port 25 connections are frequently blocked or restricted by hosting providers and ISPs.
 
-**MailScope** rejects opaque scorecards. Instead, it inspects multi-layered technical signals—RFC syntax conformity, authoritative DNS records (MX/A/AAAA), null MX suppression, and optional non-intrusive SMTP recipient probes—and presents a granular **Evidence Ledger** with stated limitations and caveats.
+**Mailora** rejects opaque scorecards. Instead, it inspects multi-layered technical signals—RFC syntax conformity, authoritative DNS records (MX/A/AAAA), null MX suppression, and optional non-intrusive SMTP recipient probes—and presents a granular **Evidence Ledger** with stated limitations and caveats.
 
 > [!IMPORTANT]
-> **What MailScope Cannot Prove**: MailScope estimates deliverability exclusively from technical infrastructure evidence. It **never guarantees final inbox placement or message delivery**. Mail delivery ultimately depends on sender IP reputation, recipient spam filters, domain authentication (SPF/DKIM/DMARC), rate limits, and internal corporate mailbox policies.
+> **What Mailora Cannot Prove**: Mailora estimates deliverability exclusively from technical infrastructure evidence. It **never guarantees final inbox placement or message delivery**. Mail delivery ultimately depends on sender IP reputation, recipient spam filters, domain authentication (SPF/DKIM/DMARC), rate limits, and internal corporate mailbox policies.
 
 ---
 
@@ -91,7 +93,7 @@ Traditional email validation tools operate as black boxes, often returning binar
 ## 5. Directory Structure
 
 ```
-mailScope/
+mailora/
 ├── .env.example              # Development environment variable reference
 ├── .env.production.example   # Production deployment environment variable reference
 ├── .gitignore                # Comprehensive Git exclusion rules
@@ -202,7 +204,7 @@ Returns service status and operational metadata.
 ```json
 {
   "status": "ok",
-  "service": "mailscope-backend",
+  "service": "mailora-backend",
   "version": "1.0.0"
 }
 ```
@@ -311,20 +313,20 @@ Automated CI is configured via `.github/workflows/ci.yml` running on pushes and 
 ## 10. Security & Privacy Controls
 
 ### Privacy & Data Retention Guarantees
-* **Zero Address Persistence**: MailScope never persists submitted email addresses or verification results to a database, key-value store, or disk files. Address batches exist purely in ephemeral process memory during request execution and are deallocated immediately upon response transmission (0-second data retention).
-* **Privacy-Safe Application Logging**: MailScope application logs never record full email addresses. Only batch counts and a privacy-masked representation of the first address (e.g. `a***@example.com`) are logged for diagnostic observability.
+* **Zero Address Persistence**: Mailora never persists submitted email addresses or verification results to a database, key-value store, or disk files. Address batches exist purely in ephemeral process memory during request execution and are deallocated immediately upon response transmission (0-second data retention).
+* **Privacy-Safe Application Logging**: Mailora application logs never record full email addresses. Only batch counts and a privacy-masked representation of the first address (e.g. `a***@example.com`) are logged for diagnostic observability.
 * **Hosting-Provider & Proxy Access Log Implications**:
-  * MailScope's application code does not log submitted email addresses.
+  * Mailora's application code does not log submitted email addresses.
   * However, external infrastructure components—such as cloud hosting access logs (Render, AWS, DigitalOcean, Heroku), reverse proxies (Nginx, Traefik), and CDNs (Cloudflare)—customarily log client IP addresses, request timestamps, User-Agent headers, and request URLs (`/api/analyze`).
-  * MailScope deliberately accepts email addresses via the HTTP request body (`POST /api/analyze`) rather than URL query parameters to ensure email addresses are not captured in standard URL access logs.
-  * Operators deploying MailScope in production should configure their edge reverse proxies and WAFs to disable body logging and set appropriate log retention windows for IP address records.
+  * Mailora deliberately accepts email addresses via the HTTP request body (`POST /api/analyze`) rather than URL query parameters to ensure email addresses are not captured in standard URL access logs.
+  * Operators deploying Mailora in production should configure their edge reverse proxies and WAFs to disable body logging and set appropriate log retention windows for IP address records.
 
 ### Public API Abuse Controls & Rate Limiting Architecture
 * **Process-Local Sliding Window Rate Limiting**:
   * Unauthenticated public APIs risk abuse from automated scrapers and denial-of-service attempts.
-  * MailScope includes an in-memory sliding-window client rate limiter (`backend/services/rate_limiter.py`) configured via `RATE_LIMIT_PER_MINUTE` (default: 60 requests/minute).
+  * Mailora includes an in-memory sliding-window client rate limiter (`backend/services/rate_limiter.py`) configured via `RATE_LIMIT_PER_MINUTE` (default: 60 requests/minute).
   * Client IP addresses are extracted from `X-Forwarded-For` or `X-Real-IP` when behind a reverse proxy, falling back to `request.remote_addr`.
-  * **Multi-Worker Architectural Note**: The rate limiter operates in-memory to preserve MailScope's zero-external-dependency and zero-persistence privacy model. In multi-worker deployments (e.g. Gunicorn with multiple worker processes), each worker enforces limits independently. For example, 4 workers with a 60 req/min limit provide an aggregate ceiling of up to 240 req/min under uniform round-robin distribution. For strict global rate limiting across horizontal clusters, an external distributed Redis token-bucket should be deployed.
+  * **Multi-Worker Architectural Note**: The rate limiter operates in-memory to preserve Mailora's zero-external-dependency and zero-persistence privacy model. In multi-worker deployments (e.g. Gunicorn with multiple worker processes), each worker enforces limits independently. For example, 4 workers with a 60 req/min limit provide an aggregate ceiling of up to 240 req/min under uniform round-robin distribution. For strict global rate limiting across horizontal clusters, an external distributed Redis token-bucket should be deployed.
 * **Bounded Concurrency & Payload Limits**:
   * Request payload size is strictly bounded by `MAX_CONTENT_LENGTH` (default: 1 MB, configurable via environment).
   * Address batch size is capped by `MAX_BATCH_SIZE` (default: 100 addresses).
@@ -345,27 +347,27 @@ Automated CI is configured via `.github/workflows/ci.yml` running on pushes and 
 * **Spreadsheet Formula Injection Defense (CWE-1236)**: Exported CSV cells matching `=+\-@|%` or preceded by leading whitespace or control characters are automatically prepended with a single quote (`'`) to neutralize formula execution in Excel and Google Sheets.
 
 ### Remaining Risks
-* While MailScope implements defense-in-depth protections, deploying any unauthenticated public API carries residual operational risks:
+* While Mailora implements defense-in-depth protections, deploying any unauthenticated public API carries residual operational risks:
   1. Distributed botnets utilizing rotating residential proxies can distribute requests across many IP addresses to bypass IP-based rate limiting.
-  2. Public SMTP probing from cloud provider IP ranges may lead to recipient mail servers temporarily greylisting or rate-limiting the MailScope host IP.
+  2. Public SMTP probing from cloud provider IP ranges may lead to recipient mail servers temporarily greylisting or rate-limiting the Mailora host IP.
   3. Reverse proxies that log full HTTP request bodies would inadvertently store email addresses in proxy access logs unless specifically configured to omit request bodies.
 
 ---
 
 ## 11. Public Deployment Guide
 
-MailScope is designed for production deployment as two independent services: a static Single-Page Application (Frontend) and a Python WSGI service (Backend).
+Mailora is designed for production deployment as two independent services: a static Single-Page Application (Frontend) and a Python WSGI service (Backend).
 
 ### Option A: Render (Automated Two-Tier via `render.yaml`)
 Render supports both Python Web Services and Static Sites with automated route rewrites using the committed `render.yaml` blueprint:
 1. Push this repository to GitHub or GitLab.
 2. Log into [Render Dashboard](https://dashboard.render.com/) and click **New + > Blueprint**.
 3. Select the repository. Render will automatically detect `render.yaml` and provision:
-   * **`mailscope-api`**: Python Web Service running Gunicorn on the `starter` tier ($7/mo, or `free` if available on your account).
-   * **`mailscope-frontend`**: Static Site with SPA wildcard rewrite `/* -> /index.html`.
+   * **`mailora-api`**: Python Web Service running Gunicorn on the `starter` tier ($7/mo, or `free` if available on your account).
+   * **`mailora-frontend`**: Static Site with SPA wildcard rewrite `/* -> /index.html`.
 4. During blueprint creation (or in the service dashboard), Render will prompt for the environment variables marked `sync: false`:
-   * Set `FRONTEND_ORIGIN` on `mailscope-api` to your frontend's assigned URL (e.g. `https://<frontend-subdomain>.onrender.com`).
-   * Set `VITE_API_BASE_URL` on `mailscope-frontend` to your backend's assigned URL (e.g. `https://<api-subdomain>.onrender.com`).
+   * Set `FRONTEND_ORIGIN` on `mailora-api` to your frontend's assigned URL (e.g. `https://<frontend-subdomain>.onrender.com`).
+   * Set `VITE_API_BASE_URL` on `mailora-frontend` to your backend's assigned URL (e.g. `https://<api-subdomain>.onrender.com`).
 5. Trigger a deploy on both services.
 
 ### Option B: Frontend on Vercel / Netlify + Backend on Railway / Fly.io
@@ -401,9 +403,9 @@ curl -f http://localhost:5000/health
 
 * **Port 25 Egress Blocking**: Outbound TCP port 25 is blocked by default across major cloud platforms (AWS, Google Cloud Run, Render, Vercel Serverless, DigitalOcean). When deploying to environments with port 25 restrictions:
   * Keep SMTP verification disabled (the default setting).
-  * If SMTP is enabled, MailScope gracefully handles connection blocks and classifies the result as `unknown` with check status `unavailable`, never falsifying a bounce.
-* **Greylisting**: Some mail servers temporarily reject initial connection attempts from unrecognized IPs with SMTP code `451` or `421`. MailScope treats temporary codes as `inconclusive`.
-* **Catch-All Mailboxes**: Domains configured with catch-all routing will respond `250 OK` to any probed address. MailScope highlights this limitation in the Evidence Ledger.
+  * If SMTP is enabled, Mailora gracefully handles connection blocks and classifies the result as `unknown` with check status `unavailable`, never falsifying a bounce.
+* **Greylisting**: Some mail servers temporarily reject initial connection attempts from unrecognized IPs with SMTP code `451` or `421`. Mailora treats temporary codes as `inconclusive`.
+* **Catch-All Mailboxes**: Domains configured with catch-all routing will respond `250 OK` to any probed address. Mailora highlights this limitation in the Evidence Ledger.
 
 ---
 

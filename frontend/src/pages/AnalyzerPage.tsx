@@ -14,6 +14,7 @@ import { analyzeAddresses, APIClientError } from "../services/api";
 import { SAMPLE_INPUT_BATCH, parseInputAddresses } from "../services/analyzerAdapter";
 import { downloadResultsCsv } from "../utils/csvExport";
 import { filterResults } from "../utils/filterResults";
+import { BRAND } from "../constants/brand";
 
 export default function AnalyzerPage() {
   // Input state
@@ -48,7 +49,7 @@ export default function AnalyzerPage() {
     setResults([]);
     setSelectedRecord(null);
     setProgressPercent(20);
-    setProgressStep(`Connecting to MailScope engine for ${addresses.length} addresses...`);
+    setProgressStep(`Connecting to ${BRAND.name} engine for ${addresses.length} addresses...`);
 
     // Dynamic progress feedback
     const progressTimer1 = setTimeout(() => {

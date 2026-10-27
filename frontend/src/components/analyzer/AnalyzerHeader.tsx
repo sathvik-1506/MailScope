@@ -2,6 +2,7 @@ import { ArrowLeft, ShieldCheck, HelpCircle } from "lucide-react";
 import Logo from "../Logo";
 import Button from "../Button";
 import Badge from "../Badge";
+import { BRAND } from "../../constants/brand";
 
 interface AnalyzerHeaderProps {
   onOpenHelp?: () => void;
@@ -42,7 +43,7 @@ export default function AnalyzerHeader({ onOpenHelp }: AnalyzerHeaderProps) {
             </button>
           )}
 
-          <Button to="/" variant="ghost" size="sm" ariaLabel="Return to MailScope home page">
+          <Button to="/" variant="ghost" size="sm" ariaLabel={`Return to ${BRAND.name} home page`}>
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             <span>Back to Home</span>
           </Button>

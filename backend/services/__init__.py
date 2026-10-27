@@ -1,5 +1,5 @@
 """
-Services package for MailScope backend.
+Services package for Mailora backend.
 """
 
 from .syntax_checker import check_syntax, SyntaxResult

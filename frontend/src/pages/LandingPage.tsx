@@ -18,6 +18,7 @@ import {
 
 import { Navbar, Footer, Section, SectionHeading, Button, Badge } from "../components";
 import ProductPreview from "../components/ProductPreview";
+import { BRAND } from "../constants/brand";
 
 /* ================================================================== */
 /*  L A N D I N G   P A G E                                          */
@@ -53,21 +54,19 @@ function HeroSection() {
     <Section className="!pt-20 !pb-10 sm:!pt-28 sm:!pb-16">
       <div className="max-w-3xl">
         <Badge color="neutral" className="mb-6">
-          Explainable Deliverability Intelligence
+          {BRAND.positioning}
         </Badge>
 
         <h1 className="text-display font-bold leading-display tracking-tight">
-          Know why an email
+          Every Address Has a Story.
           <br className="hidden sm:block" />
-          <span className="text-brand-400">&nbsp;will or won't&nbsp;</span>
-          deliver
+          <span className="text-brand-400">&nbsp;Discover the Signals.&nbsp;</span>
         </h1>
 
         <p className="mt-6 max-w-xl text-lg leading-relaxed text-text-secondary">
           Most validation tools return a green check or a red cross — with no
-          explanation. MailScope analyzes syntax, DNS records, and optional SMTP
-          signals, then shows you the evidence and its limitations so you can
-          make informed decisions.
+          explanation. {BRAND.name} analyzes syntax, authoritative DNS records, and optional SMTP
+          signals, then presents transparent evidence with full visibility into limitations.
         </p>
 
         <div className="mt-8 flex flex-wrap gap-4">
@@ -125,7 +124,7 @@ function FeaturesSection() {
     <Section id="features">
       <SectionHeading
         eyebrow="Capabilities"
-        title="What MailScope analyzes"
+        title={`What ${BRAND.name} analyzes`}
         subtitle="Four layers of deliverability evidence, each independently explained."
       />
 
@@ -163,7 +162,7 @@ const STEPS = [
     num: "02",
     icon: Search,
     title: "Multi-layer analysis",
-    desc: "MailScope validates syntax, queries DNS for MX records, and (optionally) probes SMTP — without ever sending a message.",
+    desc: `${BRAND.name} validates syntax, queries DNS for MX records, and (optionally) probes SMTP — without ever sending a message.`,
   },
   {
     num: "03",
@@ -234,7 +233,7 @@ function VerdictsSection() {
       <SectionHeading
         eyebrow="Classifications"
         title="Three honest verdicts"
-        subtitle="MailScope never claims certainty. Every result is probabilistic and every limitation is disclosed."
+        subtitle={`${BRAND.name} never claims certainty. Every result is probabilistic and every limitation is disclosed.`}
       />
 
       <div className="grid gap-6 sm:grid-cols-3">
@@ -327,7 +326,7 @@ function PrivacySection() {
       <SectionHeading
         eyebrow="Responsibility"
         title="Privacy and responsible verification"
-        subtitle="MailScope is designed to gather evidence without disrupting mail infrastructure or exposing recipient data."
+        subtitle={`${BRAND.name} is designed to gather evidence without disrupting mail infrastructure or exposing recipient data.`}
       />
 
       <div className="grid gap-6 sm:grid-cols-3">

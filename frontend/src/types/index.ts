@@ -1,5 +1,5 @@
 /**
- * Shared TypeScript types for MailScope frontend.
+ * Shared TypeScript types for Mailora frontend.
  *
  * These mirror the backend's classification model so that API responses
  * can be typed end-to-end without code generation.

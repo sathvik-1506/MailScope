@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { X, ShieldAlert, Cpu, Globe, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { BRAND } from "../../constants/brand";
 
 interface MethodologyModalProps {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export default function MethodologyModal({ isOpen, onClose }: MethodologyModalPr
         <div className="flex items-start justify-between gap-4 border-b border-border-subtle pb-4 mb-6">
           <div>
             <h2 id="methodology-title" className="text-xl font-bold tracking-tight text-text-primary">
-              MailScope Verification Methodology
+              {BRAND.name} Verification Methodology
             </h2>
             <p className="text-xs text-text-secondary mt-1">
               Transparent, evidence-based deliverability intelligence without false certainty.

@@ -1,5 +1,5 @@
 """
-Input validation, data schemas, and serialization for the MailScope API.
+Input validation, data schemas, and serialization for the Mailora API.
 """
 
 from __future__ import annotations

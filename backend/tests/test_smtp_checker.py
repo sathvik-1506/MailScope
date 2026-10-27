@@ -43,7 +43,7 @@ def _build_mock_socket(peer_ip: str = "93.184.216.34", response_code: int = 250)
 
     # Initial 220 banner, EHLO 250 response, MAIL 250 response, RCPT response, QUIT 221 response
     responses = [
-        b"220 mail.example.com ESMTP MailScope\r\n",
+        b"220 mail.example.com ESMTP Mailora\r\n",
         b"250 mail.example.com\r\n",
         b"250 2.1.0 Sender OK\r\n",
         f"{response_code} Recipient outcome\r\n".encode("utf-8"),

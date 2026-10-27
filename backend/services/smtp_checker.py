@@ -45,8 +45,8 @@ class SMTPResult:
     is_blocked: bool = False
 
 
-_HELO_DOMAIN = "mailscope.local"
-_SENDER = "verify@mailscope.local"
+_HELO_DOMAIN = "mailora.local"
+_SENDER = "verify@mailora.local"
 _DEFAULT_TIMEOUT_SECONDS = 5.0
 _MAX_TIMEOUT_SECONDS = 10.0
 

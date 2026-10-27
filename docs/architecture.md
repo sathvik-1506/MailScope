@@ -1,13 +1,13 @@
-# MailScope – Architecture Document
+# Mailora – Architecture Document
 
 > **Phase 1 – Foundation**
-> Last updated: 2026-10-26
+> Last updated: 2026-10-27
 
 ---
 
 ## 1. Overview
 
-MailScope is an **explainable email deliverability intelligence platform**.
+Mailora is an **explainable email deliverability intelligence platform**.
 It accepts batches of email addresses and classifies each one as:
 
 | Verdict | Meaning |
@@ -24,7 +24,7 @@ The platform never claims certainty; mailbox existence can only be confirmed by 
 ## 2. Repository Layout
 
 ```
-mailScope/
+mailora/
 ├── frontend/            # React/Vite/TypeScript SPA
 │   ├── src/
 │   │   ├── pages/       # Route-level page components

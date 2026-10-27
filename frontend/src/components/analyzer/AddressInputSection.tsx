@@ -7,6 +7,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Button from "../Button";
+import { BRAND } from "../../constants/brand";
 import { SAMPLE_INPUT_BATCH, parseInputAddresses } from "../../services/analyzerAdapter";
 
 interface AddressInputSectionProps {
@@ -169,7 +170,7 @@ export default function AddressInputSection({
               variant="primary"
               size="md"
               className={count === 0 || isLoading ? "opacity-50 cursor-not-allowed" : ""}
-              ariaLabel="Submit email addresses to MailScope backend verification engine"
+              ariaLabel={`Submit email addresses to ${BRAND.name} backend verification engine`}
             >
               {isLoading ? (
                 <>
@@ -192,7 +193,7 @@ export default function AddressInputSection({
         <div className="mt-4 flex items-start gap-2 rounded-lg bg-surface-primary/70 border border-border-subtle p-3 text-xs text-text-muted">
           <ShieldCheck className="h-4 w-4 shrink-0 text-brand-400 mt-0.5" aria-hidden="true" />
           <p className="leading-relaxed">
-            <strong className="text-text-secondary">Verification Engine:</strong> Addresses are submitted directly to the MailScope backend. Syntax and DNS resolution are evaluated for every address. When SMTP probing is enabled, recipient handshakes are evaluated safely without ever sending email.
+            <strong className="text-text-secondary">Verification Engine:</strong> Addresses are submitted directly to the {BRAND.name} backend. Syntax and DNS resolution are evaluated for every address. When SMTP probing is enabled, recipient handshakes are evaluated safely without ever sending email.
           </p>
         </div>
 

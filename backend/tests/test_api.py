@@ -1,5 +1,5 @@
 """
-Integration tests for the MailScope Flask API endpoints.
+Integration tests for the Mailora Flask API endpoints.
 """
 
 from unittest.mock import MagicMock, patch
@@ -22,7 +22,7 @@ def test_health_endpoint(client):
     assert response.status_code == 200
     data = response.get_json()
     assert data["status"] == "ok"
-    assert data["service"] == "mailscope-backend"
+    assert data["service"] == "mailora-backend"
 
 
 def test_security_headers(client):
@@ -398,7 +398,7 @@ def test_logging_masks_full_submitted_addresses(mock_check_dns, client, caplog):
     )
 
     import logging
-    with caplog.at_level(logging.INFO, logger="mailscope"):
+    with caplog.at_level(logging.INFO, logger="mailora"):
         secret_address = "super_secret_employee_name_99@confidential.com"
         client.post("/api/analyze", json={"addresses": [secret_address], "smtp_enabled": False})
 
