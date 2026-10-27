@@ -45,6 +45,13 @@ export interface SyntaxEvidence {
   reason: string;
 }
 
+export interface MXRecordDetail {
+  preference: number;
+  host: string;
+  ipv4?: string[];
+  ipv6?: string[];
+}
+
 export interface DNSEvidence {
   status: string;
   state?: "passed" | "failed" | "inconclusive" | "unavailable" | "skipped";
@@ -57,6 +64,15 @@ export interface DNSEvidence {
   is_nodata?: boolean;
   is_null_mx?: boolean;
   reason: string;
+  mx_status?: string;
+  mx_records?: MXRecordDetail[];
+  mx_hosts_resolve?: boolean;
+  spf_status?: string;
+  spf_record?: string | null;
+  dmarc_status?: string;
+  dmarc_record?: string | null;
+  dns_error?: string | null;
+  checked_at?: string;
 }
 
 export interface SMTPEvidence {

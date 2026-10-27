@@ -82,8 +82,14 @@ def verify_single_address(
     if not smtp_enabled:
         smtp_res = check_smtp(syntax.normalized or address, mx_host="", enabled=False)
     else:
-        mx_target = dns_res.mx_hosts[0] if dns_res.mx_hosts else ""
-        smtp_res = check_smtp(syntax.normalized or address, mx_host=mx_target, enabled=bool(mx_target))
+        mx_targets = dns_res.mx_hosts if dns_res.mx_hosts else []
+        primary_target = mx_targets[0] if mx_targets else ""
+        smtp_res = check_smtp(
+            syntax.normalized or address,
+            mx_host=primary_target,
+            enabled=bool(primary_target),
+            mx_hosts=mx_targets,
+        )
 
     # 4. Synthesize Final Classification
     return classify(syntax, dns=dns_res, smtp=smtp_res)
@@ -253,8 +259,14 @@ def create_app() -> Flask:
             if not validated.smtp_enabled:
                 smtp_res = check_smtp(syntax.normalized or addr, mx_host="", enabled=False)
             else:
-                mx_target = dns_res.mx_hosts[0] if dns_res.mx_hosts else ""
-                smtp_res = check_smtp(syntax.normalized or addr, mx_host=mx_target, enabled=bool(mx_target))
+                mx_targets = dns_res.mx_hosts if dns_res.mx_hosts else []
+                primary_target = mx_targets[0] if mx_targets else ""
+                smtp_res = check_smtp(
+                    syntax.normalized or addr,
+                    mx_host=primary_target,
+                    enabled=bool(primary_target),
+                    mx_hosts=mx_targets,
+                )
 
             res = classify(syntax, dns=dns_res, smtp=smtp_res)
             with cache_lock:

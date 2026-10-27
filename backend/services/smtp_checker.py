@@ -5,7 +5,7 @@ IMPORTANT – design constraints
 ================================
 * This module NEVER sends any message (DATA command is NEVER called).
 * SMTP checks are DISABLED by default. Callers must explicitly opt-in.
-* Blocked connections, port-25 filters, and timeouts are treated as INCONCLUSIVE,
+* Blocked connections, port-25 filters, network unreachability, and timeouts are treated as INCONCLUSIVE / UNAVAILABLE,
   not as evidence of a bounce.
 * The check uses RCPT TO probe only and immediately issues QUIT.
 * Arbitrary user-supplied SMTP hosts, URLs, or IP addresses are strictly rejected;
@@ -15,6 +15,7 @@ IMPORTANT – design constraints
   directly to that pre-validated IP address without re-resolving the hostname.
 * Post-connection destination verification: The actual connected socket peer IP is
   verified to match the validated target IP before any SMTP commands are exchanged.
+* Prioritizes IPv4 addresses and handles IPv6 unreachable errors with graceful fallback.
 * Preserves original hostname for EHLO and TLS certificate verification.
 """
 
@@ -31,7 +32,7 @@ from enum import Enum
 class SMTPStatus(str, Enum):
     ACCEPTED = "accepted"          # server confirmed the recipient probe
     REJECTED = "rejected"          # server explicitly rejected the recipient
-    INCONCLUSIVE = "inconclusive"  # blocked / timeout / greylisted / temp failure
+    INCONCLUSIVE = "inconclusive"  # blocked / timeout / greylisted / temp failure / network unreachable
     DISABLED = "disabled"          # SMTP checks not enabled
 
 
@@ -43,6 +44,8 @@ class SMTPResult:
     reason: str = ""
     is_timeout: bool = False
     is_blocked: bool = False
+    is_network_unreachable: bool = False
+    error_code: str = ""
 
 
 _HELO_DOMAIN = "mailora.local"
@@ -102,6 +105,9 @@ def resolve_mx_candidate_ips(clean_host: str) -> tuple[list[str], str]:
 
     If ANY resolved address is prohibited (loopback, private, link-local, etc.),
     this function fails closed to prevent hybrid DNS rebinding / SSRF attacks.
+
+    Orders IPv4 candidates before IPv6 candidates to provide graceful fallback
+    in environments lacking outbound IPv6 routing (such as Render).
 
     Returns:
         (valid_ip_list, error_reason)
@@ -187,21 +193,24 @@ class SafeSMTP(smtplib.SMTP):
 
 def check_smtp(
     address: str,
-    mx_host: str,
+    mx_host: str = "",
     *,
     enabled: bool = False,
     timeout: float = _DEFAULT_TIMEOUT_SECONDS,
+    mx_hosts: list[str] | None = None,
 ) -> SMTPResult:
-    """Probe *mx_host* to verify that *address* might be deliverable.
+    """Probe MX host(s) to verify that *address* might be deliverable.
 
     Never issues the DATA command or sends message content.
     Prevents TOCTOU DNS rebinding by connecting directly to pre-validated IP addresses.
+    Prioritizes IPv4 addresses and handles IPv6 unreachable errors gracefully.
 
     Args:
         address: The full email address to probe.
-        mx_host: MX hostname identified from authoritative DNS resolution.
+        mx_host: Primary MX hostname identified from authoritative DNS resolution.
         enabled: Must be ``True`` for the probe to run; defaults to ``False``.
         timeout: Connection timeout in seconds (bounded between 1.0 and 10.0).
+        mx_hosts: Optional list of MX hostnames ordered by preference.
 
     Returns:
         A :class:`SMTPResult` describing the observed recipient response.
@@ -210,118 +219,180 @@ def check_smtp(
         return SMTPResult(
             status=SMTPStatus.DISABLED,
             address=address,
+            error_code="SMTP_DISABLED",
             reason="SMTP verification is disabled. Enable it explicitly if needed.",
         )
 
-    # Validate host format (rejects IP literals, URLs, malformed strings)
-    is_valid_format, clean_host, format_err = validate_mx_host_format(mx_host)
-    if not is_valid_format:
-        return SMTPResult(
-            status=SMTPStatus.INCONCLUSIVE,
-            address=address,
-            is_blocked="prohibited" in format_err.lower(),
-            reason=format_err,
-        )
-
-    # Resolve candidate IPs and validate every candidate address
-    candidate_ips, resolution_err = resolve_mx_candidate_ips(clean_host)
-    if not candidate_ips:
-        return SMTPResult(
-            status=SMTPStatus.INCONCLUSIVE,
-            address=address,
-            is_blocked="prohibited" in resolution_err.lower() or "rejected" in resolution_err.lower(),
-            reason=f"Target host rejected for security: {resolution_err}",
-        )
+    # Determine list of MX hosts to inspect
+    hosts_to_probe: list[str] = []
+    if mx_hosts is not None:
+        hosts_to_probe = [h.strip() for h in mx_hosts if h and h.strip()]
+        if not hosts_to_probe:
+            return SMTPResult(
+                status=SMTPStatus.INCONCLUSIVE,
+                address=address,
+                error_code="INVALID_HOST",
+                reason="Invalid or missing MX host target for SMTP probe.",
+            )
+    else:
+        is_valid_format, clean_host, format_err = validate_mx_host_format(mx_host)
+        if not is_valid_format:
+            return SMTPResult(
+                status=SMTPStatus.INCONCLUSIVE,
+                address=address,
+                is_blocked="prohibited" in format_err.lower(),
+                error_code="INVALID_HOST",
+                reason=format_err,
+            )
+        hosts_to_probe = [clean_host]
 
     bounded_timeout = min(max(1.0, float(timeout)), _MAX_TIMEOUT_SECONDS)
-    per_target_timeout = max(1.0, min(bounded_timeout, _MAX_TIMEOUT_SECONDS / len(candidate_ips)))
 
     last_error_reason = ""
+    last_error_code = ""
     is_any_timeout = False
     is_any_blocked = False
+    is_any_network_unreachable = False
 
-    for target_ip in candidate_ips:
-        smtp: SafeSMTP | None = None
-        try:
-            smtp = SafeSMTP(target_ip=target_ip, host_name=clean_host, timeout=per_target_timeout)
-            smtp.connect(clean_host, 25)
+    # Bound to at most 2 MX hosts to avoid unbounded network delays
+    for target_host in hosts_to_probe[:2]:
+        is_valid_format, clean_host, format_err = validate_mx_host_format(target_host)
+        if not is_valid_format:
+            is_any_blocked = is_any_blocked or ("prohibited" in format_err.lower())
+            last_error_reason = format_err
+            last_error_code = "HOST_PROHIBITED" if is_any_blocked else "INVALID_HOST"
+            continue
 
-            # EHLO with fallback to HELO
+        candidate_ips, resolution_err = resolve_mx_candidate_ips(clean_host)
+        if not candidate_ips:
+            is_blocked_candidate = "prohibited" in resolution_err.lower() or "rejected" in resolution_err.lower()
+            is_any_blocked = is_any_blocked or is_blocked_candidate
+            last_error_reason = f"Target host rejected for security: {resolution_err}"
+            last_error_code = "SSRF_PROHIBITED" if is_blocked_candidate else "DNS_RESOLUTION_FAILED"
+            continue
+
+        # Bound per-target timeout (capped between 1.0s and 4.0s)
+        per_target_timeout = max(1.0, min(bounded_timeout, 4.0 / len(candidate_ips)))
+
+        for target_ip in candidate_ips:
+            smtp: SafeSMTP | None = None
             try:
-                smtp.ehlo(_HELO_DOMAIN)
-            except smtplib.SMTPException:
-                smtp.helo(_HELO_DOMAIN)
+                smtp = SafeSMTP(target_ip=target_ip, host_name=clean_host, timeout=per_target_timeout)
+                smtp.connect(clean_host, 25)
 
-            # Optional STARTTLS if announced, preserving hostname for certificate check
-            if smtp.has_extn("starttls"):
+                # EHLO with fallback to HELO
                 try:
-                    smtp.starttls()
+                    smtp.ehlo(_HELO_DOMAIN)
+                except smtplib.SMTPException:
+                    smtp.helo(_HELO_DOMAIN)
+
+                # Optional STARTTLS if announced, preserving hostname for certificate check
+                if smtp.has_extn("starttls"):
                     try:
-                        smtp.ehlo(_HELO_DOMAIN)
-                    except smtplib.SMTPException:
-                        smtp.helo(_HELO_DOMAIN)
-                except (smtplib.SMTPException, OSError, ssl.SSLError):
-                    # Continue in cleartext probe if TLS fails
-                    pass
-
-            # Envelope sender
-            smtp.mail(_SENDER)
-
-            # Probe recipient envelope – NEVER ISSUE DATA!
-            code, message = smtp.rcpt(address)
-            message_str = message.decode(errors="replace") if isinstance(message, bytes) else str(message)
-
-            if 200 <= code < 300:
-                return SMTPResult(
-                    status=SMTPStatus.ACCEPTED,
-                    address=address,
-                    smtp_code=code,
-                    reason=f"Server acknowledged recipient probe ({code}): {message_str}",
-                )
-            elif code in (550, 551, 552, 553, 554):
-                return SMTPResult(
-                    status=SMTPStatus.REJECTED,
-                    address=address,
-                    smtp_code=code,
-                    reason=f"Server rejected address with code {code}: {message_str}",
-                )
-            elif code in (421, 450, 451, 452):
-                return SMTPResult(
-                    status=SMTPStatus.INCONCLUSIVE,
-                    address=address,
-                    smtp_code=code,
-                    reason=f"Server returned temporary status {code} (e.g. greylisting or rate-limit): {message_str}",
-                )
-            else:
-                return SMTPResult(
-                    status=SMTPStatus.INCONCLUSIVE,
-                    address=address,
-                    smtp_code=code,
-                    reason=f"Non-definitive SMTP response {code}: {message_str}",
-                )
-
-        except (socket.timeout, TimeoutError) as exc:
-            is_any_timeout = True
-            last_error_reason = f"Connection to {target_ip}:25 timed out: {exc}"
-        except (smtplib.SMTPConnectError, ConnectionRefusedError, OSError) as exc:
-            is_any_blocked = True
-            last_error_reason = f"Connection to {target_ip}:25 refused or blocked: {exc}"
-        except smtplib.SMTPException as exc:
-            last_error_reason = f"SMTP protocol error from {target_ip}: {exc}"
-        finally:
-            if smtp is not None:
-                try:
-                    smtp.quit()
-                except Exception:
-                    try:
-                        smtp.close()
-                    except Exception:
+                        smtp.starttls()
+                        try:
+                            smtp.ehlo(_HELO_DOMAIN)
+                        except smtplib.SMTPException:
+                            smtp.helo(_HELO_DOMAIN)
+                    except (smtplib.SMTPException, OSError, ssl.SSLError):
+                        # Continue in cleartext probe if TLS fails
                         pass
+
+                # Envelope sender
+                smtp.mail(_SENDER)
+
+                # Probe recipient envelope – NEVER ISSUE DATA!
+                code, message = smtp.rcpt(address)
+                message_str = message.decode(errors="replace") if isinstance(message, bytes) else str(message)
+
+                if 200 <= code < 300:
+                    return SMTPResult(
+                        status=SMTPStatus.ACCEPTED,
+                        address=address,
+                        smtp_code=code,
+                        error_code="SMTP_ACCEPTED",
+                        reason=f"Server acknowledged recipient probe ({code}): {message_str}",
+                    )
+                elif code in (550, 551, 552, 553, 554):
+                    return SMTPResult(
+                        status=SMTPStatus.REJECTED,
+                        address=address,
+                        smtp_code=code,
+                        error_code="SMTP_REJECTED",
+                        reason=f"Server rejected address with code {code}: {message_str}",
+                    )
+                elif code in (421, 450, 451, 452):
+                    return SMTPResult(
+                        status=SMTPStatus.INCONCLUSIVE,
+                        address=address,
+                        smtp_code=code,
+                        error_code="SMTP_TEMPORARY_FAILURE",
+                        reason=f"Server returned temporary status {code} (e.g. greylisting or rate-limit): {message_str}",
+                    )
+                else:
+                    return SMTPResult(
+                        status=SMTPStatus.INCONCLUSIVE,
+                        address=address,
+                        smtp_code=code,
+                        error_code="SMTP_UNEXPECTED_CODE",
+                        reason=f"Non-definitive SMTP response {code}: {message_str}",
+                    )
+
+            except (socket.timeout, TimeoutError) as exc:
+                is_any_timeout = True
+                last_error_reason = f"Connection to {target_ip}:25 timed out: {exc}"
+                last_error_code = "SMTP_TIMEOUT"
+            except (ConnectionRefusedError, smtplib.SMTPConnectError) as exc:
+                is_any_blocked = True
+                last_error_reason = f"Connection to {target_ip}:25 refused or blocked: {exc}"
+                last_error_code = "SMTP_BLOCKED"
+            except OSError as exc:
+                err_msg = str(exc).lower()
+                err_no = getattr(exc, "errno", None)
+                if err_no in (101, 113) or "unreachable" in err_msg or "no route to host" in err_msg:
+                    is_any_network_unreachable = True
+                    last_error_reason = f"Connection to {target_ip}:25 failed (network unreachable): {exc}"
+                    last_error_code = "SMTP_NETWORK_UNREACHABLE"
+                else:
+                    is_any_blocked = True
+                    last_error_reason = f"Connection to {target_ip}:25 refused or blocked: {exc}"
+                    last_error_code = "SMTP_BLOCKED"
+            except smtplib.SMTPException as exc:
+                last_error_reason = f"SMTP protocol error from {target_ip}: {exc}"
+                last_error_code = "SMTP_PROTOCOL_ERROR"
+            finally:
+                if smtp is not None:
+                    try:
+                        smtp.quit()
+                    except Exception:
+                        try:
+                            smtp.close()
+                        except Exception:
+                            pass
+
+    # All candidate connections failed or were inconclusive
+    is_blocked_final = is_any_blocked or is_any_network_unreachable
+    is_timeout_final = is_any_timeout and not is_blocked_final
+
+    if is_blocked_final:
+        final_error_code = "SMTP_UNAVAILABLE"
+        final_reason = (
+            f"Outbound SMTP port 25 connection was blocked or unreachable across candidate hosts ({last_error_reason}). "
+            "Cloud hosting environments (such as Render) typically restrict outbound port 25."
+        )
+    elif is_timeout_final:
+        final_error_code = "SMTP_TIMEOUT"
+        final_reason = f"SMTP probe timed out across all candidates: {last_error_reason}"
+    else:
+        final_error_code = last_error_code or "SMTP_INCONCLUSIVE"
+        final_reason = f"SMTP probe inconclusive across all candidates: {last_error_reason}"
 
     return SMTPResult(
         status=SMTPStatus.INCONCLUSIVE,
         address=address,
-        is_timeout=is_any_timeout,
-        is_blocked=is_any_blocked,
-        reason=f"SMTP probe inconclusive across all candidates: {last_error_reason}",
+        is_timeout=is_timeout_final,
+        is_blocked=is_blocked_final,
+        is_network_unreachable=is_any_network_unreachable,
+        error_code=final_error_code,
+        reason=final_reason,
     )

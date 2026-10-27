@@ -232,6 +232,15 @@ def classify(
         "is_nodata": getattr(dns, "is_nodata", False),
         "is_null_mx": getattr(dns, "is_null_mx", False),
         "reason": dns.reason,
+        "mx_status": getattr(dns, "mx_status", "found" if dns.status == DNSStatus.HAS_MX else "no_record"),
+        "mx_records": getattr(dns, "mx_records", []),
+        "mx_hosts_resolve": getattr(dns, "mx_hosts_resolve", bool(dns.mx_hosts)),
+        "spf_status": getattr(dns, "spf_status", "not_checked"),
+        "spf_record": getattr(dns, "spf_record", None),
+        "dmarc_status": getattr(dns, "dmarc_status", "not_checked"),
+        "dmarc_record": getattr(dns, "dmarc_record", None),
+        "dns_error": getattr(dns, "dns_error", None),
+        "checked_at": getattr(dns, "checked_at", ""),
     }
 
     # ------------------------------------------------------------------ #
@@ -359,6 +368,30 @@ def classify(
         evidence.append(f"DNS (A record fallback): {dns.reason}")
         limitations.append("Domain lacks dedicated MX records; delivery relies on implicit MX fallback (RFC 5321 § 5.1).")
 
+    # Record SPF / DMARC authentication findings in evidence ledger
+    spf_status = getattr(dns, "spf_status", "not_checked")
+    spf_record = getattr(dns, "spf_record", None)
+    if spf_status == "found" and spf_record:
+        evidence.append(f"SPF record published: {spf_record}")
+    elif spf_status == "no_record":
+        evidence.append("No SPF record published for domain.")
+    elif spf_status == "invalid":
+        evidence.append("Invalid SPF configuration (multiple SPF records published).")
+
+    dmarc_status = getattr(dns, "dmarc_status", "not_checked")
+    dmarc_record = getattr(dns, "dmarc_record", None)
+    if dmarc_status == "found" and dmarc_record:
+        evidence.append(f"DMARC policy published: {dmarc_record}")
+    elif dmarc_status == "no_record":
+        evidence.append("No DMARC policy published for domain (_dmarc).")
+    elif dmarc_status == "invalid":
+        evidence.append("Invalid DMARC configuration (multiple DMARC records published).")
+
+    if spf_status == "found" or dmarc_status == "found":
+        limitations.append(
+            "Email authentication records (SPF, DMARC) provide domain-level sender validation and policy enforcement, but do not verify whether an individual mailbox exists."
+        )
+
     # ------------------------------------------------------------------ #
     # Rule 8. Valid Domain, but SMTP Check Not Performed or Disabled     #
     # ------------------------------------------------------------------ #
@@ -439,17 +472,29 @@ def classify(
         )
 
     # ------------------------------------------------------------------ #
-    # Rule 11. SMTP Connection Timeout                                   #
+    # Rule 11. SMTP Server Unavailable or Blocked (Egress port 25)      #
     # ------------------------------------------------------------------ #
-    if getattr(smtp, "is_timeout", False) or "timeout" in smtp.reason.lower() or "timed out" in smtp.reason.lower():
-        evidence.append(f"SMTP timeout: {smtp.reason}")
-        limitations.append("SMTP connection timed out; temporary network timeouts must never be treated as bounces.")
+    is_blocked = getattr(smtp, "is_blocked", False)
+    is_unreachable = getattr(smtp, "is_network_unreachable", False)
+    error_code = getattr(smtp, "error_code", "")
+    reason_lower = smtp.reason.lower()
+
+    if (
+        is_blocked
+        or is_unreachable
+        or error_code in ("SMTP_BLOCKED", "SMTP_NETWORK_UNREACHABLE", "SMTP_UNAVAILABLE")
+        or any(term in reason_lower for term in ("blocked", "unreachable", "refused", "no route to host"))
+    ):
+        evidence.append(f"SMTP unavailable: {smtp.reason}")
+        limitations.append(
+            "SMTP port 25 was unreachable or blocked by hosting environment policy (such as Render egress restrictions); mailbox existence could not be probed."
+        )
         return ClassificationResult(
             address=syntax.original,
             normalized_address=syntax.normalized,
             verdict=Verdict.UNKNOWN,
-            reason_code=ReasonCode.SMTP_TIMEOUT.value,
-            explanation=f"SMTP connection or response timed out: {smtp.reason}",
+            reason_code=ReasonCode.SMTP_UNAVAILABLE.value,
+            explanation=f"SMTP verification could not be completed because outbound port 25 connection was blocked or unreachable: {smtp.reason}",
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,
@@ -460,17 +505,17 @@ def classify(
         )
 
     # ------------------------------------------------------------------ #
-    # Rule 12. SMTP Server Unavailable or Blocked                        #
+    # Rule 12. SMTP Connection Timeout                                   #
     # ------------------------------------------------------------------ #
-    if getattr(smtp, "is_blocked", False) or any(term in smtp.reason.lower() for term in ("blocked", "connection", "refused", "unreachable")):
-        evidence.append(f"SMTP unavailable: {smtp.reason}")
-        limitations.append("SMTP port 25 was unreachable or blocked by policy; mailbox existence is unconfirmed.")
+    if getattr(smtp, "is_timeout", False) or error_code == "SMTP_TIMEOUT" or "timed out" in reason_lower or "timeout" in reason_lower:
+        evidence.append(f"SMTP timeout: {smtp.reason}")
+        limitations.append("SMTP connection timed out; temporary network timeouts must never be treated as bounces.")
         return ClassificationResult(
             address=syntax.original,
             normalized_address=syntax.normalized,
             verdict=Verdict.UNKNOWN,
-            reason_code=ReasonCode.SMTP_UNAVAILABLE.value,
-            explanation=f"SMTP connection was blocked or refused: {smtp.reason}",
+            reason_code=ReasonCode.SMTP_TIMEOUT.value,
+            explanation=f"SMTP connection or response timed out: {smtp.reason}",
             syntax_evidence=syntax_evidence,
             dns_evidence=dns_evidence,
             smtp_evidence=smtp_evidence,

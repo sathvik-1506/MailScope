@@ -29,19 +29,39 @@ Traditional email validation tools operate as black boxes, often returning binar
 
 ### What the Deployed Version CAN Check
 * **RFC 5321 / RFC 5322 Syntax Validity**: Grammatical conformity, ASCII / IDNA internationalized domain decoding, local-part bounds (<= 64 chars), and normalized forms.
-* **Authoritative DNS Mail Routing**: Real-time resolution of authoritative Mail Exchange (MX) resource records, priority ordering, and target hostname validity.
-* **Implicit MX Fallback (RFC 5321 § 5.1)**: Fallback A and AAAA record routing when a domain deliberately lacks dedicated MX records.
-* **Null MX Suppression (RFC 7505)**: Explicit detection of domains declaring they do not accept email via a priority 0 dot record (`.`).
-* **Non-Existent Domains (NXDOMAIN)**: Authoritative identification of non-existent domains distinguished from temporary resolver timeouts.
+* **Authoritative DNS Mail Routing (RFC 5321)**: Real-time resolution of authoritative Mail Exchange (MX) resource records, priority/preference sorting, and dual-stack target hostname IP resolution (both IPv4 `A` and IPv6 `AAAA`).
+* **Implicit MX Fallback (RFC 5321 § 5.1)**: Automatic fallback to domain `A` and `AAAA` records when a domain deliberately omits dedicated MX resource records.
+* **Null MX Suppression (RFC 7505)**: Authoritative detection of domains declaring they do not accept email via a priority 0 root dot record (`.`), definitively classifying associated addresses as `likely_bounce`.
+* **Email Authentication Records (RFC 7208 & RFC 7489)**:
+  * **SPF (Sender Policy Framework)**: Inspects root domain TXT records for valid `v=spf1` policies.
+  * **DMARC (Domain-based Message Authentication)**: Inspects `_dmarc.<domain>` TXT records for valid `v=DMARC1` policies.
+  *(Note: SPF and DMARC establish domain-level sender authentication policies; their presence does not verify mailbox existence.)*
+* **Non-Existent Domains (NXDOMAIN)**: Authoritative identification of non-existent domains distinguished from temporary resolver timeouts or SERVFAIL conditions.
 * **Technical Mail Provider Classification**: Infrastructure provider inference (Google Workspace, Microsoft 365, Proton, Yahoo, iCloud, Zoho, Fastmail) from authoritative MX patterns, defaulting custom domains to `"Custom / Unknown Provider"`.
-* **Optional SMTP Recipient Probing (When Supported by Host)**: Envelope recipient handshake (`MAIL FROM` / `RCPT TO` / `RSET`) to test for explicit recipient rejections (`550`) or mailbox acceptance (`250`).
+* **Optional Bounded SMTP Probing**: Non-intrusive protocol handshakes (`MAIL FROM` / `RCPT TO` / `RSET`) with bounded timeouts, dual-stack candidate resolution, IPv6-to-IPv4 fallback, and graceful degradation on blocked egress.
 
 ### What the Deployed Version CANNOT Check
 * **Guaranteed Inbox Delivery**: Mailora evaluates technical routing infrastructure. It **cannot guarantee final inbox placement**, as message delivery depends on sender IP reputation, message content, spam filter scoring, and SPF/DKIM/DMARC authentication.
-* **Mailbox Existence on Catch-All Domains**: Mail servers configured with catch-all routing accept all recipient addresses indiscriminately during the SMTP handshake. Mailora flags catch-all limitations in the Evidence Ledger but cannot distinguish whether an individual mailbox is actively read.
+* **Mailbox Existence on Catch-All Domains**: Mail servers configured with catch-all routing accept all recipient addresses indiscriminately during the SMTP handshake (`250 OK`). Mailora flags catch-all limitations in the Evidence Ledger but cannot distinguish whether an individual mailbox is actively read.
 * **Mailbox Existence Behind Greylisting / Silent Drops**: Security gateways that return temporary deferrals (SMTP `451` / `421`) or accept envelopes and silently drop undeliverable messages post-session cannot be definitively verified without transmitting actual mail. Mailora safely classifies these as `unknown` / `inconclusive`.
 * **Direct SMTP Mailbox Probing on Standard Cloud Hosts (Port 25 Egress Blocks)**: Major cloud hosting platforms (such as Render, AWS, Vercel, Google Cloud, DigitalOcean) block outbound TCP port 25 to prevent spam. In these deployed environments, Mailora keeps SMTP disabled by default and evaluates syntax and authoritative DNS routing. When SMTP is enabled on hosts with blocked egress, Mailora safely reports `unknown` with check status `unavailable`, rather than guessing or falsifying a bounce.
 * **Personal Identity or Personal Demographics**: Mailora analyzes technical dataset composition only. It **cannot and will never infer** age, gender, ethnicity, income, location, or personal identity from email addresses.
+
+### Definitive vs. Inconclusive Results Matrix
+
+| Scenario / Signal | Observed Technical Evidence | Mailora Verdict | Reason Code | Definitive vs. Inconclusive |
+| :--- | :--- | :--- | :--- | :--- |
+| **Invalid Syntax** | RFC 5321/5322 grammar failure | `likely_bounce` | `SYNTAX_INVALID` | **Definitive**: The address cannot be routed. |
+| **Non-Existent Domain** | Authoritative DNS `NXDOMAIN` | `likely_bounce` | `DOMAIN_NOT_FOUND` | **Definitive**: Domain does not exist in the root zone. |
+| **Null MX Record** | RFC 7505 priority 0 dot (`.`) | `likely_bounce` | `NULL_MX` | **Definitive**: Domain explicitly rejects all incoming mail. |
+| **Explicit SMTP Rejection** | SMTP `550`, `551`, `553` response | `likely_bounce` | `SMTP_REJECTED` | **Definitive**: Server actively refused the recipient address. |
+| **DNS Resolver Failure** | DNS `SERVFAIL`, `REFUSED`, timeout | `unknown` | `DNS_TIMEOUT` / `DNS_ERROR` | **Inconclusive**: DNS infrastructure issue; domain status unknown. |
+| **No Mail Routing** | Domain exists but has no MX or A/AAAA | `likely_bounce` | `NO_MX_RECORDS` | **Definitive**: Domain has no valid mail exchanger. |
+| **Valid MX, SMTP Disabled** | Valid MX records resolved; SMTP off | `unknown` | `MAILBOX_UNCONFIRMED` | **Inconclusive**: Mailbox existence unverified (by user choice). |
+| **Valid MX, Port 25 Blocked** | Outbound port 25 unreachable/blocked | `unknown` | `SMTP_UNAVAILABLE` | **Inconclusive**: Hosting provider egress block; DNS evidence preserved. |
+| **Valid MX, SMTP Timeout** | TCP connect / handshake timeout | `unknown` | `SMTP_TIMEOUT` | **Inconclusive**: Remote server unreachable; mailbox status unknown. |
+| **Valid MX, Greylisting** | SMTP `451`, `421` temporary deferral | `unknown` | `SMTP_GREYLISTED` | **Inconclusive**: Server deferred connection temporarily. |
+| **Valid MX, Explicit 250 OK** | SMTP `250 OK` recipient response | `likely_delivered` | `DELIVERABLE` | **High Probability**: Mailbox accepted (subject to catch-all caveat). |
 
 ---
 
@@ -222,12 +242,20 @@ npm run dev
 ## 11. API Documentation
 
 ### `GET /health`
-Returns service status and operational metadata.
+Returns service status, environment name, active checks, and operational metadata:
+```bash
+curl -s http://localhost:5000/health
+```
 
 ### `POST /api/analyze` (or `POST /api/v1/analyze`)
 Analyzes a batch of email addresses across the verification pipeline.
 * **Payload**: `{"addresses": ["user@example.com"], "smtp_enabled": false}`
-* **Response**: Includes `batch_id`, `count`, `analysed_at`, and `results` array with checks and evidence.
+* **Response**: Includes `batch_id`, `count`, `analysed_at`, and `results` array with checks, DNS/MX audit records, SPF/DMARC evidence, and explicit limitations:
+```bash
+curl -s -X POST http://localhost:5000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"addresses": ["test@example.com"], "smtp_enabled": false}'
+```
 
 ### `POST /api/extract` (or `POST /api/v1/extract`)
 Parses uploaded documents (`.txt`, `.csv`, `.pdf`, `.docx`, `.eml`) and returns candidate email addresses with source references.
@@ -246,11 +274,11 @@ Permanently clears all analysis run records from the history database.
 ## 12. Automated Testing & Quality Validation
 
 ### Backend Pytest Suite
-Runs **164 unit and integration tests** covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, document extraction, history persistence, pagination, retention purging, and HTTP error status codes:
+Runs **182 unit and integration tests** covering syntax parsing, DNS resolution scenarios, dual-stack MX IP resolution, Null MX (RFC 7505), implicit A/AAAA fallback (RFC 5321 § 5.1), SPF/DMARC extraction, SMTP state transitions, network unreachable handling, port 25 block classification, SSRF fail-closed rejection, document extraction, history persistence, pagination, retention purging, and HTTP error status codes:
 ```bash
 pytest backend/tests
 ```
-**Outcome**: 164 passed, 0 failures.
+**Outcome**: 182 passed, 0 failures.
 
 ### Frontend Test Suite
 Runs **77 unit tests across 17 test suites** verifying address parsing, CWE-1236 CSV formula injection defense, filter/search consistency, API client mapping, document extraction, theme persistence, and history ledger management:
@@ -292,12 +320,36 @@ curl -f http://localhost:5000/health
 
 ---
 
-## 14. Operational Limitations & SMTP Realities
+## 14. Operational Limitations, DNS/MX Auditing & SMTP Realities
 
-* **Port 25 Egress Blocking**: Outbound TCP port 25 is blocked by default across major cloud hosting providers. SMTP verification is disabled by default to maintain fast and reliable operation. When enabled, connection blocks are classified as `unknown` with check status `unavailable`, never falsifying a bounce.
-* **Greylisting**: Some mail servers temporarily reject initial connection attempts from unrecognized IPs with code `451` or `421`. Mailora treats temporary codes as `inconclusive`.
-* **Catch-All Mailboxes**: Domains configured with catch-all routing will respond `250 OK` to any probed address. Mailora highlights this caveat in the Evidence Ledger.
-* **CWE-1236 Sanitization**: All exported CSV files prepend a single quote (`'`) to formula injection triggers (`=`, `+`, `-`, `@`, tab, pipe) to neutralize formula execution in Microsoft Excel and Google Sheets.
+### How DNS/MX Auditing Works
+1. **Domain Extraction & Normalization**: Strips whitespace, converts internationalized domain names (IDNA) via Punycode, and validates domain labels against RFC 1035 bounds.
+2. **Authoritative MX Query**: Queries DNS for `MX` resource records. Records are sorted ascending by preference.
+3. **Dual-Stack IP Target Resolution**: Each MX hostname is resolved to both IPv4 (`A`) and IPv6 (`AAAA`) addresses. If an MX host cannot be resolved, it is flagged as unresolvable.
+4. **RFC 7505 Null MX Detection**: If a domain publishes a single MX record pointing to `.` (dot) with preference 0, it explicitly rejects all incoming mail. Mailora detects this and immediately returns `likely_bounce`.
+5. **RFC 5321 § 5.1 Fallback**: When a domain has no MX records, Mailora falls back to checking `A` and `AAAA` records for the root domain.
+6. **Authentication Records Inspection**:
+   * **SPF**: Queries root domain TXT records for `v=spf1`.
+   * **DMARC**: Queries `_dmarc.<domain>` TXT records for `v=DMARC1`.
+7. **Failure Disambiguation**: Temporary DNS timeouts or `SERVFAIL` errors are never classified as bounces; they are recorded as `inconclusive` (`unknown` verdict) to prevent false negatives.
+
+### What SMTP Probing Can and Cannot Establish
+* **Can Establish**:
+  * Definitive recipient rejection (`550`, `551`, `553`): Indicates the mailbox does not exist or was rejected by the server.
+  * Active mailbox acceptance (`250 OK`): Indicates the server accepted the recipient for routing (subject to catch-all limitations).
+* **Cannot Establish**:
+  * Mailbox existence on catch-all domains (which accept all addresses).
+  * Mailbox existence on servers with greylisting (`451` / `421`) or anti-spam deferral.
+  * Final inbox placement (spam filtering, IP reputation, SPF/DKIM alignment).
+
+### Why Render and Cloud Hosts Block Port 25
+* **Cloud Egress Restrictions**: Major PaaS providers like Render block outbound TCP traffic on port 25 entirely to prevent abusive spam botnets from operating on their IP ranges.
+* **IPv6 Routing Limitations**: In containerized cloud environments like Render, IPv6 outbound routes may be unconfigured (`[Errno 101] Network is unreachable`), causing dual-stack DNS resolutions to fail if IPv6 is prioritized over IPv4.
+* **Mailora's Resilient Handling**:
+  * Resolves candidate addresses and falls back across IPv6 and IPv4.
+  * Classifies port 25 blocks (`Errno 101`, `ConnectionRefusedError`, `No route to host`) as `SMTP_UNAVAILABLE` rather than `SMTP_TIMEOUT` or a fake bounce.
+  * Preserves all valid DNS and syntax evidence in the Evidence Ledger.
+  * Gracefully returns `unknown` with a clear explanation that mailbox existence could not be confirmed due to hosting egress restrictions.
 
 ---
 
