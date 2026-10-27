@@ -20,7 +20,33 @@ Traditional email validation tools operate as black boxes, often returning binar
 
 ---
 
-## 2. Core Features & Application Workspaces
+## 2. What the Deployed Version Can and Cannot Check
+
+> [!WARNING]
+> **Ethical Usage & Testing Policy**:
+> **Do not send messages to addresses you do not own or are not explicitly authorized to test.**
+> Mailora is built with a strict zero-message architecture: it **never** transmits message bodies, issues the SMTP `DATA` command, or delivers test emails to mailboxes. All deliverability intelligence is derived solely from non-intrusive protocol handshakes and public domain infrastructure.
+
+### What the Deployed Version CAN Check
+* **RFC 5321 / RFC 5322 Syntax Validity**: Grammatical conformity, ASCII / IDNA internationalized domain decoding, local-part bounds (<= 64 chars), and normalized forms.
+* **Authoritative DNS Mail Routing**: Real-time resolution of authoritative Mail Exchange (MX) resource records, priority ordering, and target hostname validity.
+* **Implicit MX Fallback (RFC 5321 § 5.1)**: Fallback A and AAAA record routing when a domain deliberately lacks dedicated MX records.
+* **Null MX Suppression (RFC 7505)**: Explicit detection of domains declaring they do not accept email via a priority 0 dot record (`.`).
+* **Non-Existent Domains (NXDOMAIN)**: Authoritative identification of non-existent domains distinguished from temporary resolver timeouts.
+* **Technical Mail Provider Classification**: Infrastructure provider inference (Google Workspace, Microsoft 365, Proton, Yahoo, iCloud, Zoho, Fastmail) from authoritative MX patterns, defaulting custom domains to `"Custom / Unknown Provider"`.
+* **Optional SMTP Recipient Probing (When Supported by Host)**: Envelope recipient handshake (`MAIL FROM` / `RCPT TO` / `RSET`) to test for explicit recipient rejections (`550`) or mailbox acceptance (`250`).
+
+### What the Deployed Version CANNOT Check
+* **Guaranteed Inbox Delivery**: Mailora evaluates technical routing infrastructure. It **cannot guarantee final inbox placement**, as message delivery depends on sender IP reputation, message content, spam filter scoring, and SPF/DKIM/DMARC authentication.
+* **Mailbox Existence on Catch-All Domains**: Mail servers configured with catch-all routing accept all recipient addresses indiscriminately during the SMTP handshake. Mailora flags catch-all limitations in the Evidence Ledger but cannot distinguish whether an individual mailbox is actively read.
+* **Mailbox Existence Behind Greylisting / Silent Drops**: Security gateways that return temporary deferrals (SMTP `451` / `421`) or accept envelopes and silently drop undeliverable messages post-session cannot be definitively verified without transmitting actual mail. Mailora safely classifies these as `unknown` / `inconclusive`.
+* **Direct SMTP Mailbox Probing on Standard Cloud Hosts (Port 25 Egress Blocks)**: Major cloud hosting platforms (such as Render, AWS, Vercel, Google Cloud, DigitalOcean) block outbound TCP port 25 to prevent spam. In these deployed environments, Mailora keeps SMTP disabled by default and evaluates syntax and authoritative DNS routing. When SMTP is enabled on hosts with blocked egress, Mailora safely reports `unknown` with check status `unavailable`, rather than guessing or falsifying a bounce.
+* **Personal Identity or Personal Demographics**: Mailora analyzes technical dataset composition only. It **cannot and will never infer** age, gender, ethnicity, income, location, or personal identity from email addresses.
+
+---
+
+## 3. Core Features & Application Workspaces
+
 
 ### Application Routes & Workspaces
 
@@ -38,7 +64,7 @@ Mailora is structured as a multi-page single-page application (SPA) with dedicat
 
 ---
 
-## 3. Demographics Policy & Technical Dataset Composition
+## 4. Demographics Policy & Technical Dataset Composition
 
 > [!NOTE]
 > **Product Definition of "Demographics"**: In Mailora, "demographics" strictly refers to the **technical characteristics and composition of the email dataset** (e.g. domain distribution, mail provider infrastructure, routing protocols, and syntax hygiene).
@@ -53,7 +79,7 @@ Key data integrity and privacy principles:
 
 ---
 
-## 4. Multi-Tier Storage Architecture & Privacy Lifecycle
+## 5. Multi-Tier Storage Architecture & Privacy Lifecycle
 
 Mailora employs a privacy-preserving storage model designed for unauthenticated environments:
 
@@ -86,7 +112,7 @@ Mailora employs a privacy-preserving storage model designed for unauthenticated 
 
 ---
 
-## 5. Document Email Extraction Workflow
+## 6. Document Email Extraction Workflow
 
 The Analyze Emails workspace (`/app/analyze`) includes a streaming extraction workflow to detect candidate addresses from document files:
 
@@ -107,7 +133,7 @@ The Analyze Emails workspace (`/app/analyze`) includes a streaming extraction wo
 
 ---
 
-## 6. Appearance & Theme System
+## 7. Appearance & Theme System
 
 Mailora features an application-wide appearance system:
 * **Three Selectable Modes**:
@@ -120,7 +146,7 @@ Mailora features an application-wide appearance system:
 
 ---
 
-## 7. Technology Stack
+## 8. Technology Stack
 
 ### Frontend
 * **Core**: React 19, TypeScript 5.8+, Vite 8
@@ -140,7 +166,7 @@ Mailora features an application-wide appearance system:
 
 ---
 
-## 8. Environment Variables
+## 9. Environment Variables
 
 ### Backend Configuration
 
@@ -162,7 +188,7 @@ Mailora features an application-wide appearance system:
 
 ---
 
-## 9. Local Development Setup
+## 10. Local Development Setup
 
 ### Prerequisites
 * Python 3.12+ or 3.14+
@@ -193,7 +219,7 @@ npm run dev
 
 ---
 
-## 10. API Documentation
+## 11. API Documentation
 
 ### `GET /health`
 Returns service status and operational metadata.
@@ -217,7 +243,7 @@ Permanently clears all analysis run records from the history database.
 
 ---
 
-## 11. Automated Testing & Quality Validation
+## 12. Automated Testing & Quality Validation
 
 ### Backend Pytest Suite
 Runs **164 unit and integration tests** covering syntax parsing, DNS resolution scenarios, SMTP state transitions, SSRF rejection, document extraction, history persistence, pagination, retention purging, and HTTP error status codes:
@@ -243,7 +269,7 @@ npm run build   # tsc -b && vite build (generates production bundle in dist/)
 
 ---
 
-## 12. Public Deployment Guide
+## 13. Public Deployment Guide
 
 Mailora is designed for production deployment as two independent services: a static Single-Page Application (Frontend) and a Python WSGI service (Backend).
 
@@ -266,7 +292,7 @@ curl -f http://localhost:5000/health
 
 ---
 
-## 13. Operational Limitations & SMTP Realities
+## 14. Operational Limitations & SMTP Realities
 
 * **Port 25 Egress Blocking**: Outbound TCP port 25 is blocked by default across major cloud hosting providers. SMTP verification is disabled by default to maintain fast and reliable operation. When enabled, connection blocks are classified as `unknown` with check status `unavailable`, never falsifying a bounce.
 * **Greylisting**: Some mail servers temporarily reject initial connection attempts from unrecognized IPs with code `451` or `421`. Mailora treats temporary codes as `inconclusive`.
@@ -275,6 +301,6 @@ curl -f http://localhost:5000/health
 
 ---
 
-## 14. License
+## 15. License
 
 Distributed under the MIT License. See `LICENSE` for details.
